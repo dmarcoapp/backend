@@ -1,0 +1,32 @@
+<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+
+    <p style="margin: 0 0 16px 0;">
+        We detected a login from a country where we have not seen your account before.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Country</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ countryCode ?? 'Unknown' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>IP</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ ip ?? 'Unknown' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Device</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ userAgent ?? 'Unknown' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Time</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ occurredAt|date('Y-m-d H:i:s T') }}</td>
+        </tr>
+    </table>
+
+    <p style="margin: 0 0 16px 0;">
+        If this was not you, please reset your password immediately.
+    </p>
+
+    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
+</div>

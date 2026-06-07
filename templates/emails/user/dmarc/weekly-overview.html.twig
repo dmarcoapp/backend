@@ -1,0 +1,160 @@
+<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+
+    <p style="margin: 0 0 16px 0;">
+        Here is your DMARC weekly overview for
+        <strong>{{ periodStart|date('Y-m-d') }}</strong>
+        to
+        <strong>{{ periodEnd|date('Y-m-d') }}</strong>.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Reports</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.reportCount }}</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.reportTrend|number_format(2) }}%</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Messages</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.messageCount }}</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.messageTrend|number_format(2) }}%</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Pass rate</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ (dashboard.passRate * 100)|number_format(2) }}%</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.passTrend|number_format(2) }}%</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Threats blocked</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.threatsBlockedCount }}</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.threatsBlockedTrend|number_format(2) }}%</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>New domains</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.newDomainCount }}</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.newDomainTrend|number_format(2) }}%</td>
+        </tr>
+    </table>
+
+    <p style="margin: 0 0 8px 0;"><strong>Compliance</strong></p>
+    <p style="margin: 0 0 16px 0;">
+        DMARC: {{ dashboard.compliance.dmarc|number_format(2)*100 }}% ({{ dashboard.complianceTrend.dmarc|number_format(2) }}%)<br>
+        DKIM: {{ dashboard.compliance.dkim|number_format(2)*100 }}% ({{ dashboard.complianceTrend.dkim|number_format(2) }}%)<br>
+        SPF: {{ dashboard.compliance.spf|number_format(2)*100 }}% ({{ dashboard.complianceTrend.spf|number_format(2) }}%)
+    </p>
+
+    <p style="margin: 0 0 8px 0;"><strong>Daily message volume</strong></p>
+    <p style="margin: 0 0 16px 0;">
+        {% for day, count in dashboard.messageCountByDate %}
+            {{ day }}: {{ count }}<br>
+        {% endfor %}
+    </p>
+
+    <p style="margin: 0 0 8px 0;"><strong>Daily blocked threats</strong></p>
+    <p style="margin: 0 0 16px 0;">
+        {% for day, count in dashboard.threatCountByDate %}
+            {{ day }}: {{ count }}<br>
+        {% endfor %}
+    </p>
+
+    <p style="margin: 0 0 8px 0;"><strong>New domains</strong></p>
+    {% if dashboard.newDomains is empty %}
+        <p style="margin: 0 0 16px 0;">No new domains this week.</p>
+    {% else %}
+        <p style="margin: 0 0 16px 0;">
+            {% for domain in dashboard.newDomains %}
+                {{ domain }}<br>
+            {% endfor %}
+        </p>
+    {% endif %}
+
+    <p style="margin: 0 0 8px 0;"><strong>Top offenders</strong></p>
+    {% if dashboard.topOffenders is empty %}
+        <p style="margin: 0 0 16px 0;">No offender activity this week.</p>
+    {% else %}
+        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+            <tr>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Source IP</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Abuse Email</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Tech Email</th>
+                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
+            </tr>
+            {% for offender in dashboard.topOffenders %}
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIp ?? 'Unknown' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgName ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgCountry ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgAbuseEmail ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgTechEmail ?? 'N/A' }}</td>
+                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.count ?? 0 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <p style="margin: 0 0 8px 0;"><strong>Top senders</strong></p>
+    {% if dashboard.topSenders is empty %}
+        <p style="margin: 0 0 16px 0;">No sender activity this week.</p>
+    {% else %}
+        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+            <tr>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Source IP</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Abuse Email</th>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Tech Email</th>
+                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
+            </tr>
+            {% for sender in dashboard.topSenders %}
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIp ?? 'Unknown' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgName ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgCountry ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgAbuseEmail ?? 'N/A' }}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgTechEmail ?? 'N/A' }}</td>
+                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.count ?? 0 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <p style="margin: 0 0 8px 0;"><strong>Source country distribution</strong></p>
+    {% if dashboard.sourceCountryDistribution is empty %}
+        <p style="margin: 0 0 16px 0;">No source country data this week.</p>
+    {% else %}
+        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+            <tr>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
+                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
+            </tr>
+            {% for country in dashboard.sourceCountryDistribution %}
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ country.country ?? 'Unknown' }}</td>
+                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ country.count ?? 0 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <p style="margin: 0 0 8px 0;"><strong>Top reporting organizations</strong></p>
+    {% if dashboard.topReportingOrganizations is empty %}
+        <p style="margin: 0 0 16px 0;">No reporting organization activity this week.</p>
+    {% else %}
+        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+            <tr>
+                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
+                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Reports</th>
+            </tr>
+            {% for organization in dashboard.topReportingOrganizations %}
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ organization.reportingOrganization ?? 'Unknown' }}</td>
+                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ organization.count ?? 0 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
+</div>

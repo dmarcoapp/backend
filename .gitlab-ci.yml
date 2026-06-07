@@ -1,0 +1,25 @@
+stages:
+    - deploy
+
+deploy:
+    stage: deploy
+    before_script:
+        - apt-get update && apt-get install -y rsync
+        - mkdir -p ~/.ssh
+        - echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+        - chmod 600 ~/.ssh/id_rsa
+        - ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+    script:
+        - echo "Deploying to production server..."
+        - rsync -avzqR --exclude '.git' --exclude 'secrets' --exclude '.env' --exclude '.env.local' --exclude '.env.prod.local' --exclude 'config/jwt' --exclude 'var' --exclude 'vendor' --delete ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH"
+        - |
+            ssh -p 22 "$DEPLOY_USER@$DEPLOY_HOST" << EOF
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            docker compose -f compose.yaml -f compose.prod.yaml --env-file .env build
+            docker compose -f compose.yaml -f compose.prod.yaml --env-file .env pull --ignore-buildable
+            docker compose -f compose.yaml -f compose.prod.yaml --env-file .env up -d --remove-orphans
+            EOF
+    only:
+        - main
+    when: manual

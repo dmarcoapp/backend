@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="5"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="true"
+>
+    <projectFiles>
+        <directory name="src" />
+<!--        <directory name="tests" />-->
+        <ignoreFiles>
+            <directory name="vendor" />
+            <directory name="var" />
+            <file name="src/Kernel.php" />
+        </ignoreFiles>
+    </projectFiles>
+
+    <plugins>
+        <pluginClass class="Psalm\SymfonyPsalmPlugin\Plugin">
+            <containerXml>var/cache/dev/App_KernelDevDebugContainer.xml</containerXml>
+            <symfonyMajorVersion>7</symfonyMajorVersion>
+        </pluginClass>
+    </plugins>
+
+    <issueHandlers>
+        <MixedAssignment errorLevel="error" />
+        <MixedArgument errorLevel="error" />
+        <MixedArrayAccess errorLevel="error" />
+        <MixedPropertyTypeCoercion errorLevel="error" />
+        <PossiblyUnusedParam errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/DTO" />
+                <directory name="src/Repository" />
+            </errorLevel>
+        </PossiblyUnusedParam>
+
+        <UndefinedMethod errorLevel="error" />
+        <UndefinedPropertyAssignment errorLevel="error" />
+        <UndefinedPropertyFetch errorLevel="error" />
+        <NullReference errorLevel="error" />
+        <InvalidArgument errorLevel="error" />
+        <InvalidReturnStatement errorLevel="error" />
+        <InvalidReturnType errorLevel="error" />
+        <PossiblyInvalidArrayAccess errorLevel="error" />
+        <PossiblyInvalidArrayOffset errorLevel="error" />
+        <PossiblyInvalidFunctionCall errorLevel="error" />
+        <PossiblyInvalidMethodCall errorLevel="error" />
+        <PossiblyNullArgument errorLevel="error" />
+        <PossiblyNullReference errorLevel="error" />
+        <ClassMustBeFinal errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/Entity" />
+                <directory name="src/Repository" />
+            </errorLevel>
+        </ClassMustBeFinal>
+        <PossiblyUnusedMethod errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/DTO" />
+                <directory name="src/Entity" />
+                <directory name="src/Event" />
+                <directory name="src/Repository" />
+                <file name="src/Service/User/TwoFactor/TwoFactorService.php" />
+            </errorLevel>
+        </PossiblyUnusedMethod>
+        <PossiblyUnusedProperty errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/DTO" />
+            </errorLevel>
+        </PossiblyUnusedProperty>
+        <PossiblyUnusedReturnValue errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/Repository" />
+                <file name="src/Service/User/UserFactory.php" />
+            </errorLevel>
+        </PossiblyUnusedReturnValue>
+        <UnusedClass errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/Controller" />
+                <directory name="src/Mapper" />
+            </errorLevel>
+        </UnusedClass>
+        <UnusedParam errorLevel="error">
+            <errorLevel type="suppress">
+                <directory name="src/DTO" />
+            </errorLevel>
+        </UnusedParam>
+
+        <!-- <MixedTypeCoercion errorLevel="suppress" /> -->
+    </issueHandlers>
+
+</psalm>

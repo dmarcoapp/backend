@@ -1,0 +1,9 @@
+twig:
+    file_name_pattern: '*.twig'
+
+    globals:
+        frontend_url: '%env(APP_FRONTEND_URL)%'
+
+when@test:
+    twig:
+        strict_variables: true

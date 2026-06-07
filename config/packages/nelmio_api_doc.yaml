@@ -1,0 +1,78 @@
+nelmio_api_doc:
+    documentation:
+        info:
+            title: DMARCo Backend
+            description: DMARC Report analyzer
+            version: 1.0.0
+        components:
+            securitySchemes:
+                Bearer:
+                    type: http
+                    scheme: bearer
+                    bearerFormat: JWT
+        security:
+            - Bearer: []
+        paths:
+            /v1/auth/login_check:
+                post:
+                    tags: [ "Authentication" ]
+                    summary: Authenticate a user with username and password.
+                    security: []
+                    requestBody:
+                        required: true
+                        content:
+                            application/json:
+                                schema:
+                                    type: object
+                                    properties:
+                                        username:
+                                            type: string
+                                        password:
+                                            type: string
+                    responses:
+                        '200':
+                            description: Successful authentication
+                            content:
+                                application/json:
+                                    schema:
+                                        type: object
+                                        properties:
+                                            token:
+                                                type: string
+                                            refresh_token:
+                                                type: string
+                                            refresh_token_expiration:
+                                                type: string
+                                                format: date-time
+            /v1/auth/token_refresh:
+                post:
+                    tags: [ "Authentication" ]
+                    summary: Get a new access token using refresh token.
+                    security: []
+                    requestBody:
+                        required: true
+                        content:
+                            application/json:
+                                schema:
+                                    type: object
+                                    properties:
+                                        refresh_token:
+                                            type: string
+                    responses:
+                        '200':
+                            description: Successful authentication
+                            content:
+                                application/json:
+                                    schema:
+                                        type: object
+                                        properties:
+                                            token:
+                                                type: string
+                                            refresh_token:
+                                                type: string
+                                            refresh_token_expiration:
+                                                type: string
+                                                format: date-time
+    areas: # to filter documented areas
+        path_patterns:
+            - ^/v1(?!/doc$) # Accepts routes under /v1 except /v1/doc

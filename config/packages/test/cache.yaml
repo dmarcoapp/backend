@@ -1,0 +1,17 @@
+framework:
+    cache:
+        app: cache.adapter.array
+        default_redis_provider: '%env(REDIS_DSN)%'
+        pools:
+            block_list_token_cache_pool:
+                adapter: cache.adapter.redis
+            anonymous_api_rate_limiter_pool:
+                adapter: cache.adapter.array
+            anonymous_sendmail_rate_limiter_pool:
+                adapter: cache.adapter.array
+            logged_in_api_rate_limiter_pool:
+                adapter: cache.adapter.array
+            dashboard_cache_pool:
+                adapter: cache.adapter.array
+            ip_lookup_cache_pool:
+                adapter: cache.adapter.array
