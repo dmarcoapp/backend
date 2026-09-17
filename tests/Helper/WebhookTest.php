@@ -43,6 +43,13 @@ final class WebhookTest extends TestCase
         self::assertFalse(InboundReportEmailWebhookSignatureVerifier::verify('x', '1700000000', 'sha256', 'secret'));
     }
 
+    public function testVerifySignatureRejectsEmptySecret(): void
+    {
+        $this->expectException(\LogicException::class);
+
+        InboundReportEmailWebhookSignatureVerifier::verify('x', '1700000000', 'sha256=deadbeef', '');
+    }
+
     public function testVerifySignatureRejectsMismatchedSignature(): void
     {
         $header = 'sha256=deadbeef';

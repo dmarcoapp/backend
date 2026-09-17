@@ -12,6 +12,10 @@ final readonly class InboundReportEmailWebhookSignatureVerifier
         string $signatureHeader,
         string $secret
     ): bool {
+        if ('' === trim($secret)) {
+            throw new \LogicException('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET must not be empty.');
+        }
+
         if (!str_contains($signatureHeader, '=')) {
             return false;
         }
