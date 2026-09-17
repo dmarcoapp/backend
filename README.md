@@ -5,7 +5,8 @@
 <h1 align="center">DMARCo Backend</h1>
 
 <p align="center">
-  Open-source, self-hostable backend for DMARC aggregate report analysis.
+  Self-hosted DMARC report processing: the API, the workers, and the pipeline
+  behind DMARCo.
 </p>
 
 <p align="center">
@@ -16,22 +17,21 @@
 
 > [!IMPORTANT]
 > **Start at [dmarcoapp/dmarcoapp](https://github.com/dmarcoapp/dmarcoapp).**
-> That repository installs all of DMARCo — this backend, the dashboard and the
-> mail gateway — with one command, and it is the issue tracker for the whole
-> project. Something wrong, including in this component?
-> [Open an issue there](https://github.com/dmarcoapp/dmarcoapp/issues/new/choose).
-> This repository holds one component's source; it is not where you start if you
-> just want to run DMARCo.
+> That repository installs all of DMARCo with one command: this backend, the
+> dashboard, and the mail gateway. It is also the issue tracker for the whole
+> project, so
+> [report anything that goes wrong there](https://github.com/dmarcoapp/dmarcoapp/issues/new/choose),
+> including problems in this component. What follows is one component's source,
+> for people working on it.
 
-DMARCo helps domain owners receive DMARC aggregate reports, validate report XML,
-process sending sources and authentication results, and expose the data through
-a REST API for dashboards and account workflows.
+This is the part of DMARCo that turns report email into data you can query: a
+Symfony API, the workers behind it, the database model, the schedulers, and the
+report processing pipeline.
 
-This repository contains the Symfony API, background workers, database model,
-schedulers, and report processing pipeline. For inbound SMTP collection, pair it
-with [dmarcoapp/mail-inbound](https://github.com/dmarcoapp/mail-inbound), or use
-any gateway that uploads report attachments to S3-compatible storage and calls
-the signed webhook documented below.
+Reports reach it as a signed webhook plus a file in S3-compatible storage.
+[`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound) does that
+job, and so does any gateway you build against the webhook contract documented
+below.
 
 ## Overview
 
@@ -62,16 +62,14 @@ That can be AWS S3, MinIO, or another compatible service.
 
 - Signed inbound webhook for DMARC report email metadata
 - S3-compatible attachment retrieval
-- DMARC aggregate XML validation against `config/dmarc/rua.xsd`
+- DMARC aggregate XML validated against `config/dmarc/rua.xsd`
 - Async processing of reports, report records, domains, and source IP data
-- REST API under `/v1`
-- OpenAPI documentation at `/v1/doc`
-- User registration, email verification, login, refresh tokens, password reset,
-  and logout
-- Two-factor authentication with email and authenticator app support
-- User dashboard, notification settings, and sender blocklist APIs
-- Scheduled cleanup and periodic user/domain processing
-- Docker-based development and production deployment
+- REST API under `/v1`, with OpenAPI documentation at `/v1/doc`
+- Registration, email verification, login, refresh tokens, password reset, and
+  logout
+- Two-factor authentication by email or authenticator app
+- Dashboard, notification settings, and sender blocklist APIs
+- Scheduled cleanup and periodic user and domain processing
 
 ## Requirements
 
@@ -84,7 +82,7 @@ That can be AWS S3, MinIO, or another compatible service.
 The application targets the PHP and Symfony versions declared in
 `composer.json`.
 
-## Get Started
+## Get started
 
 Clone the repository and start the development stack:
 
@@ -95,20 +93,9 @@ docker compose build --pull
 docker compose up --wait
 ```
 
-The API is available on:
-
-```text
-http://localhost:8080
-```
-
-OpenAPI documentation is available on:
-
-```text
-http://localhost:8080/v1/doc
-```
-
-The container entrypoint waits for PostgreSQL and runs Doctrine migrations
-automatically.
+The API is then on `http://localhost:8080`, and its OpenAPI documentation on
+`http://localhost:8080/v1/doc`. The container entrypoint waits for PostgreSQL
+and runs Doctrine migrations automatically.
 
 Generate local JWT keys if `config/jwt/private.pem` and `config/jwt/public.pem`
 do not exist:
@@ -156,9 +143,9 @@ Important settings:
 | `JWT_SECRET_KEY` / `JWT_PUBLIC_KEY` / `JWT_PASSPHRASE` | JWT signing key configuration |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3-compatible storage target |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | S3 credentials |
-| `S3_FORCE_PATH_STYLE` | Enables path-style S3 URLs, useful for MinIO |
+| `S3_FORCE_PATH_STYLE` | Enables path-style S3 URLs, which MinIO needs |
 
-## Inbound Report Webhook
+## Inbound report webhook
 
 The backend accepts inbound report notifications at:
 
@@ -305,7 +292,7 @@ Generate migrations only with Symfony Maker:
 docker compose exec php bash -lc "bin/console make:migration"
 ```
 
-## Useful Files
+## Useful files
 
 - `compose.yaml`: base Docker Compose stack
 - `compose.override.yaml`: development overrides
@@ -318,7 +305,7 @@ docker compose exec php bash -lc "bin/console make:migration"
 - `config/packages/messenger.yaml`: async queue configuration
 - `frankenphp/Caddyfile`: FrankenPHP/Caddy server configuration
 
-## Related Projects
+## Related projects
 
 - [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp): ready-made
   Docker Compose stack and installer for the full application

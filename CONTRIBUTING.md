@@ -1,6 +1,6 @@
 # Contributing
 
-This repository holds the DMARCo backend: the Symfony API, the workers and the
+This repository holds the DMARCo backend: the Symfony API, the workers, and the
 report processing pipeline. Pull requests for that code belong here.
 
 **Issues belong in [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp/issues),**
