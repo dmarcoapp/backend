@@ -9,8 +9,11 @@ doctrine:
         profiling_collect_backtrace: '%kernel.debug%'
         use_savepoints: true
     orm:
-        auto_generate_proxy_classes: true
         enable_lazy_ghost_objects: true
+        # PHP native lazy objects replace generated proxy classes, which the ORM
+        # deprecated in 3.5 and drops in 4.0. This also makes the proxy_dir,
+        # proxy_namespace and auto_generate_proxy_classes options obsolete.
+        enable_native_lazy_objects: true
         report_fields_where_declared: true
         validate_xml_mapping: true
         naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
@@ -36,8 +39,6 @@ when@test:
 when@prod:
     doctrine:
         orm:
-            auto_generate_proxy_classes: false
-            proxy_dir: '%kernel.build_dir%/doctrine/orm/Proxies'
             query_cache_driver:
                 type: pool
                 pool: doctrine.system_cache_pool
