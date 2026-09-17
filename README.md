@@ -1,10 +1,31 @@
-# DMARCo Backend
+<p align="center">
+  <img src=".github/logo.svg" alt="" width="80" height="80">
+</p>
 
-Open-source, self-hostable backend for DMARC aggregate report analysis.
+<h1 align="center">DMARCo Backend</h1>
+
+<p align="center">
+  Open-source, self-hostable backend for DMARC aggregate report analysis.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+  <a href="https://github.com/dmarcoapp/backend/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dmarcoapp/backend/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/dmarcoapp/backend/pkgs/container/backend"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-dmarcoapp%2Fbackend-1f6feb"></a>
+</p>
+
+> [!IMPORTANT]
+> **Start at [dmarcoapp/dmarcoapp](https://github.com/dmarcoapp/dmarcoapp).**
+> That repository installs all of DMARCo — this backend, the dashboard and the
+> mail gateway — with one command, and it is the issue tracker for the whole
+> project. Something wrong, including in this component?
+> [Open an issue there](https://github.com/dmarcoapp/dmarcoapp/issues/new/choose).
+> This repository holds one component's source; it is not where you start if you
+> just want to run DMARCo.
 
 DMARCo helps domain owners receive DMARC aggregate reports, validate report XML,
-process sending sources and authentication results, and expose the data through a
-REST API for dashboards and account workflows.
+process sending sources and authentication results, and expose the data through
+a REST API for dashboards and account workflows.
 
 This repository contains the Symfony API, background workers, database model,
 schedulers, and report processing pipeline. For inbound SMTP collection, pair it
@@ -28,7 +49,8 @@ DMARC report email
 Services in the Docker stack:
 
 - `php`: Symfony API served by FrankenPHP/Caddy
-- `worker`: Symfony Messenger consumer for async report processing and scheduled work
+- `worker`: Symfony Messenger consumer for async report processing and scheduled
+  work
 - `database`: PostgreSQL
 - `rabbitmq`: async queue
 - `redis`: cache backend
@@ -44,7 +66,8 @@ That can be AWS S3, MinIO, or another compatible service.
 - Async processing of reports, report records, domains, and source IP data
 - REST API under `/v1`
 - OpenAPI documentation at `/v1/doc`
-- User registration, email verification, login, refresh tokens, password reset, and logout
+- User registration, email verification, login, refresh tokens, password reset,
+  and logout
 - Two-factor authentication with email and authenticator app support
 - User dashboard, notification settings, and sender blocklist APIs
 - Scheduled cleanup and periodic user/domain processing
@@ -66,8 +89,8 @@ The application targets the PHP and Symfony versions declared in
 Clone the repository and start the development stack:
 
 ```bash
-git clone <repo-url>
-cd dmarco-backend
+git clone https://github.com/dmarcoapp/backend.git
+cd backend
 docker compose build --pull
 docker compose up --wait
 ```
@@ -87,8 +110,8 @@ http://localhost:8080/v1/doc
 The container entrypoint waits for PostgreSQL and runs Doctrine migrations
 automatically.
 
-Generate local JWT keys if `config/jwt/private.pem` and
-`config/jwt/public.pem` do not exist:
+Generate local JWT keys if `config/jwt/private.pem` and `config/jwt/public.pem`
+do not exist:
 
 ```bash
 docker compose exec php bash -lc "bin/console lexik:jwt:generate-keypair --overwrite --no-interaction"
@@ -109,8 +132,8 @@ docker compose down --remove-orphans
 ## Configuration
 
 Default values live in `.env`. Put local and production overrides in real
-environment variables or uncommitted `.env.local` / `.env.prod.local` files.
-Do not commit production secrets.
+environment variables or uncommitted `.env.local` / `.env.prod.local` files. Do
+not commit production secrets.
 
 Important settings:
 
@@ -182,15 +205,16 @@ Message handling:
 - User blocklist rules can reject reports by sender address.
 - The first attachment is loaded from S3-compatible storage.
 - The backend currently processes normalized `.xml` report attachments.
-- The XML is validated against the DMARC aggregate report schema before it is stored and processed.
+- The XML is validated against the DMARC aggregate report schema before it is
+  stored and processed.
 
 If you use `dmarcoapp/mail-inbound`, configure its `WEBHOOK_URL` to point to
 this endpoint and use the same webhook secret on both sides.
 
 ## Production
 
-For a complete, ready-made installation, including the dashboard and the
-inbound mail gateway, use
+For a complete, ready-made installation, including the dashboard and the inbound
+mail gateway, use
 [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp). It ships a
 Docker Compose stack and an installer that wires all three components together.
 
@@ -230,17 +254,18 @@ S3_BUCKET='mail' \
 docker compose -f compose.yaml -f compose.prod.yaml up -d --wait
 ```
 
-The supplied compose file binds the HTTP service to `127.0.0.1:8080` by
-default. For a public deployment, either place the app behind a reverse proxy or
-override the published ports. If exposing FrankenPHP/Caddy directly with
-automatic TLS, publish ports `80`, `443`, and `443/udp`, then set
-`SERVER_NAME` to the public API hostname.
+The supplied compose file binds the HTTP service to `127.0.0.1:8080` by default.
+For a public deployment, either place the app behind a reverse proxy or override
+the published ports. If exposing FrankenPHP/Caddy directly with automatic TLS,
+publish ports `80`, `443`, and `443/udp`, then set `SERVER_NAME` to the public
+API hostname.
 
 Before exposing the service:
 
 - Replace all default secrets and credentials.
 - Generate deployment-specific JWT keys.
-- Configure PostgreSQL, RabbitMQ, Redis, and S3 storage for durable production use.
+- Configure PostgreSQL, RabbitMQ, Redis, and S3 storage for durable production
+  use.
 - Configure `MAILER_DSN` and `APP_EMAIL_SENDER_ADDRESS`.
 - Restrict `CORS_ALLOW_ORIGIN` to trusted frontend origins.
 - Confirm the inbound gateway validates DMARC emails and signs webhook requests.
@@ -288,17 +313,21 @@ docker compose exec php bash -lc "bin/console make:migration"
 - `.env`: committed defaults
 - `.env.local`: uncommitted local overrides
 - `config/dmarc/rua.xsd`: DMARC aggregate report XML schema
-- `config/packages/flysystem.yaml`: S3-compatible attachment storage configuration
+- `config/packages/flysystem.yaml`: S3-compatible attachment storage
+  configuration
 - `config/packages/messenger.yaml`: async queue configuration
 - `frankenphp/Caddyfile`: FrankenPHP/Caddy server configuration
-- `docs/`: additional Docker and deployment notes
 
 ## Related Projects
 
-- [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp): ready-made Docker Compose stack and installer for the full application
-- [`dmarcoapp/dashboard`](https://github.com/dmarcoapp/dashboard): web UI for reviewing DMARC aggregate reports
-- [`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound): self-hostable inbound mail gateway for DMARC aggregate reports
+- [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp): ready-made
+  Docker Compose stack and installer for the full application
+- [`dmarcoapp/dashboard`](https://github.com/dmarcoapp/dashboard): web UI for
+  reviewing DMARC aggregate reports
+- [`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound):
+  self-hostable inbound mail gateway for DMARC aggregate reports
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE).
