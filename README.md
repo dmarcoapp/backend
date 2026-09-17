@@ -189,12 +189,44 @@ this endpoint and use the same webhook secret on both sides.
 
 ## Production
 
-Build and run the production image:
+For a complete, ready-made installation, including the dashboard and the
+inbound mail gateway, use
+[`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp). It ships a
+Docker Compose stack and an installer that wires all three components together.
+
+Prebuilt images are published to `ghcr.io/dmarcoapp/backend` on every GitHub
+release, tagged with the release version and `latest`. To use them instead of a
+local build, override the image in a Compose file:
+
+```yaml
+services:
+    php:
+        image: ghcr.io/dmarcoapp/backend:latest
+    worker:
+        image: ghcr.io/dmarcoapp/backend:latest
+```
+
+Build and run the production image yourself:
 
 ```bash
 docker compose -f compose.yaml -f compose.prod.yaml build --pull --no-cache
 SERVER_NAME=:80 \
 APP_SECRET='<secure random value>' \
+APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET='<secure random value>' \
+POSTGRES_PASSWORD='<secure random value>' \
+RABBITMQ_DEFAULT_USER='<rabbitmq user>' \
+RABBITMQ_DEFAULT_PASS='<secure random value>' \
+REDIS_DSN='redis://redis' \
+MAILER_DSN='<smtp dsn>' \
+APP_EMAIL_SENDER_ADDRESS='no-reply@example.com' \
+APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN='aggregate-reports.example.com' \
+APP_FRONTEND_URL='https://dash.example.com' \
+CORS_ALLOW_ORIGIN='^https://dash\.example\.com$' \
+S3_ENDPOINT='https://s3.example.com' \
+S3_REGION='us-east-1' \
+S3_ACCESS_KEY='<s3 access key>' \
+S3_SECRET_KEY='<s3 secret key>' \
+S3_BUCKET='mail' \
 docker compose -f compose.yaml -f compose.prod.yaml up -d --wait
 ```
 
@@ -261,6 +293,12 @@ docker compose exec php bash -lc "bin/console make:migration"
 - `frankenphp/Caddyfile`: FrankenPHP/Caddy server configuration
 - `docs/`: additional Docker and deployment notes
 
+## Related Projects
+
+- [`dmarcoapp/dmarcoapp`](https://github.com/dmarcoapp/dmarcoapp): ready-made Docker Compose stack and installer for the full application
+- [`dmarcoapp/dashboard`](https://github.com/dmarcoapp/dashboard): web UI for reviewing DMARC aggregate reports
+- [`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound): self-hostable inbound mail gateway for DMARC aggregate reports
+
 ## License
 
-MIT.
+Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
