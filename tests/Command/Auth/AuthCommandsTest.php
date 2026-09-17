@@ -66,6 +66,28 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertNotNull(self::getContainer()->get(UserRepository::class)->findOneBy(['email' => $email]));
     }
 
+    public function testCreateUserCommandWithSimpleOptionDoesNotAskForRoles(): void
+    {
+        $email = 'cmd-simple-'.uniqid('', true).'@example.com';
+
+        $command = new CreateUserCommand(
+            self::getContainer()->get(UserFactory::class),
+            self::getContainer()->get(UserRepository::class),
+        );
+
+        // Only three answers are provided, so a roles question would fail the command.
+        $tester = new CommandTester($command);
+        $tester->setInputs([$email, 'User', 'Str0ngPassw0rd!@#']);
+        $tester->execute(['--simple' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringNotContainsString('Roles', $tester->getDisplay());
+
+        $user = self::getContainer()->get(UserRepository::class)->findOneBy(['email' => $email]);
+        self::assertNotNull($user);
+        self::assertSame(['ROLE_USER'], $user->getRoles());
+    }
+
     public function testCreateUserCommandFailsWhenUserExists(): void
     {
         $email = 'cmd-existing-'.uniqid('', true).'@example.com';
