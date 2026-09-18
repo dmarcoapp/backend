@@ -25,6 +25,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
             method: 'PATCH',
             uri: '/v1/user/profile',
             payload: [
+                'currentPassword' => 'Str0ngPassw0rd!@#',
                 'name' => 'Profile User Updated',
                 'password' => 'N3wStr0ngPass!@#',
             ],
@@ -40,6 +41,64 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 
         $hasher = self::getContainer()->get(UserPasswordHasherInterface::class);
         self::assertTrue($hasher->isPasswordValid($user, 'N3wStr0ngPass!@#'));
+    }
+
+    public function testPatchRejectsPasswordChangeWithoutCurrentPassword(): void
+    {
+        $this->createVerifiedUser('no-current@example.com', 'Str0ngPassw0rd!@#');
+
+        $token = $this->login('no-current@example.com', 'Str0ngPassw0rd!@#');
+
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/user/profile',
+            payload: ['password' => 'N3wStr0ngPass!@#'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(422, $response->getStatusCode(), (string) $response->getContent());
+        self::assertTrue($this->passwordIsUnchanged('no-current@example.com', 'Str0ngPassw0rd!@#'));
+    }
+
+    public function testPatchRejectsPasswordChangeWithWrongCurrentPassword(): void
+    {
+        $this->createVerifiedUser('wrong-current@example.com', 'Str0ngPassw0rd!@#');
+
+        $token = $this->login('wrong-current@example.com', 'Str0ngPassw0rd!@#');
+
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/user/profile',
+            payload: [
+                'currentPassword' => 'N0tTheCurr3ntOne!@#',
+                'password' => 'N3wStr0ngPass!@#',
+            ],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
+        self::assertTrue($this->passwordIsUnchanged('wrong-current@example.com', 'Str0ngPassw0rd!@#'));
+    }
+
+    public function testPatchUpdatesNameWithoutCurrentPassword(): void
+    {
+        $this->createVerifiedUser('name-only@example.com', 'Str0ngPassw0rd!@#', 'Name Only');
+
+        $token = $this->login('name-only@example.com', 'Str0ngPassw0rd!@#');
+
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/user/profile',
+            payload: ['name' => 'Renamed'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+
+        $this->entityManager->clear();
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'name-only@example.com']);
+        self::assertNotNull($user);
+        self::assertSame('Renamed', $user->getName());
     }
 
     public function testDeleteRejectsMismatchedEmail(): void
@@ -134,5 +193,15 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
         );
 
         self::assertSame(429, $response->getStatusCode(), (string) $response->getContent());
+    }
+
+    private function passwordIsUnchanged(string $email, string $expectedPassword): bool
+    {
+        $this->entityManager->clear();
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
+        self::assertNotNull($user);
+
+        return self::getContainer()->get(UserPasswordHasherInterface::class)
+            ->isPasswordValid($user, $expectedPassword);
     }
 }

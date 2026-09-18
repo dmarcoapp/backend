@@ -62,6 +62,7 @@ final class ProfileController extends AbstractController
         content: new Model(type: UserApi::class)
     )]
     #[OA\Patch(
+        description: 'Setting a new password also requires the current one.',
         summary: 'Updates the authenticated user. Only updates the fields provided.',
         security: [['Bearer' => []]],
     )]
@@ -79,6 +80,15 @@ final class ProfileController extends AbstractController
         }
 
         if (null !== $input->password) {
+            // An access token alone must not be enough to take an account over
+            // for good, so a new password costs the current one.
+            if (
+                null === $input->currentPassword
+                || !$this->passwordHasher->isPasswordValid($user, $input->currentPassword)
+            ) {
+                throw new BadRequestHttpException('Current password does not match.');
+            }
+
             $hashed = $this->passwordHasher->hashPassword($user, $input->password);
             $user->setPassword($hashed);
             $this->eventDispatcher->dispatch(new PasswordChangeEvent($user));

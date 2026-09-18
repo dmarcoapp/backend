@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\DTO\Input\User;
 
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 final readonly class Profile
 {
@@ -16,5 +17,26 @@ final readonly class Profile
         #[Assert\NotCompromisedPassword]
         #[\SensitiveParameter]
         public ?string $password = null,
+        #[Assert\Length(max: 255)]
+        #[Assert\Callback([self::class, 'validateCurrentPassword'])]
+        #[\SensitiveParameter]
+        public ?string $currentPassword = null,
     ) {}
+
+    public static function validateCurrentPassword(mixed $value, ExecutionContextInterface $context, mixed $payload): void
+    {
+        $profile = $context->getObject();
+
+        if (!$profile instanceof self || null === $profile->password) {
+            return;
+        }
+
+        if (is_string($value) && '' !== trim($value)) {
+            return;
+        }
+
+        $context->buildViolation('The current password is required to set a new one.')
+            ->addViolation()
+        ;
+    }
 }
