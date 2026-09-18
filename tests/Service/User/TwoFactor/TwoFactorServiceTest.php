@@ -85,6 +85,53 @@ final class TwoFactorServiceTest extends TestCase
         self::assertSame(6, strlen($service->getAppCode($user)));
     }
 
+    public function testEmailCodeWorksOnlyOnce(): void
+    {
+        $service = $this->createService();
+
+        $user = new User();
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+
+        $code = $service->getEmailCode($user);
+
+        self::assertTrue($service->isValidCode($user, $code));
+        self::assertFalse($service->isValidCode($user, $code));
+    }
+
+    public function testAcceptingAnEmailCodeRetiresEveryOtherOneInFlight(): void
+    {
+        $service = $this->createService();
+
+        $user = new User();
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+
+        $secretBefore = $user->getTwoFactorEmailSecret();
+        self::assertTrue($service->isValidCode($user, $service->getEmailCode($user)));
+
+        // The next code the owner is mailed differs from the one just spent,
+        // even inside the same five minute step, so signing in again works.
+        self::assertNotSame($secretBefore, $user->getTwoFactorEmailSecret());
+        self::assertTrue($service->isValidCode($user, $service->getEmailCode($user)));
+    }
+
+    public function testAppCodeStaysReusableWithinItsWindow(): void
+    {
+        $service = $this->createService();
+
+        $user = new User();
+        $user->setTwoFactorMethod(TwoFactorMethod::APP);
+        $user->setTwoFactorAppSecret(Base32Codec::encode('app-secret'));
+
+        $code = $service->getAppCode($user);
+
+        // Only the mailed codes are spent on use: an authenticator derives its
+        // own from a secret the owner shares with us and cannot be rotated here.
+        self::assertTrue($service->isValidCode($user, $code));
+        self::assertTrue($service->isValidCode($user, $code));
+    }
+
     private function createService(): TwoFactorService
     {
         $entityManager = $this->createStub(EntityManagerInterface::class);

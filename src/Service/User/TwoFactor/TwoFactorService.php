@@ -61,9 +61,7 @@ final readonly class TwoFactorService
             return $this->totpService->verifyCode($secret, $code, self::APP_PERIOD_SECONDS, self::CODE_DIGITS, self::CODE_WINDOW);
         }
 
-        $secret = $this->ensureEmailSecret($user);
-
-        return $this->totpService->verifyCode($secret, $code, self::EMAIL_PERIOD_SECONDS, self::CODE_DIGITS, self::CODE_WINDOW);
+        return $this->consumeEmailCode($user, $code);
     }
 
     public function isValidAppCode(User $user, string $code): bool
@@ -86,5 +84,33 @@ final readonly class TwoFactorService
             self::CODE_DIGITS,
             self::APP_PERIOD_SECONDS,
         );
+    }
+
+    /**
+     * A mailed code stays valid for the whole acceptance window, long enough
+     * that anyone who reads the message could sign in with it again. Accepting
+     * one therefore rotates the secret it came from, which retires that code
+     * and every other one already in the owner's mailbox. Rotating beats
+     * recording the spent time step, because a code derived from an unchanged
+     * secret is the same code for the rest of the step: the owner signing in
+     * again within those five minutes would be mailed what they just used.
+     */
+    private function consumeEmailCode(User $user, string $code): bool
+    {
+        $isValid = $this->totpService->verifyCode(
+            $this->ensureEmailSecret($user),
+            $code,
+            self::EMAIL_PERIOD_SECONDS,
+            self::CODE_DIGITS,
+            self::CODE_WINDOW,
+        );
+
+        if (!$isValid) {
+            return false;
+        }
+
+        $this->secretManager->rotateEmailSecret($user);
+
+        return true;
     }
 }

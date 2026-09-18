@@ -391,14 +391,17 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $token->method('getUser')->willReturn($user);
 
         $wrong = new Request(content: json_encode(['two_factor_code' => '000000'], JSON_THROW_ON_ERROR));
-        $right = new Request(content: json_encode(['two_factor_code' => $service->getEmailCode($user)], JSON_THROW_ON_ERROR));
+        // A fresh code each time: accepting one retires it.
+        $right = static fn (): Request => new Request(
+            content: json_encode(['two_factor_code' => $service->getEmailCode($user)], JSON_THROW_ON_ERROR)
+        );
 
         self::assertSame(401, $handler->onAuthenticationSuccess($wrong, $token)->getStatusCode());
-        self::assertSame(200, $handler->onAuthenticationSuccess($right, $token)->getStatusCode());
+        self::assertSame(200, $handler->onAuthenticationSuccess($right(), $token)->getStatusCode());
 
         // The successful attempt released the budget the typo had taken.
         self::assertSame(401, $handler->onAuthenticationSuccess($wrong, $token)->getStatusCode());
-        self::assertSame(200, $handler->onAuthenticationSuccess($right, $token)->getStatusCode());
+        self::assertSame(200, $handler->onAuthenticationSuccess($right(), $token)->getStatusCode());
     }
 
     private function createTokenForUser(string $email): TokenInterface

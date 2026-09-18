@@ -28,6 +28,16 @@ final readonly class TwoFactorSecretManager
         return $secret;
     }
 
+    /**
+     * Replaces the secret the mailed codes are derived from, which retires every
+     * code already sent to the owner.
+     */
+    public function rotateEmailSecret(User $user): void
+    {
+        $user->setTwoFactorEmailSecret($this->secretGenerator->generate());
+        $this->entityManager->flush();
+    }
+
     public function ensureAppSecret(User $user): string
     {
         $secret = $user->getTwoFactorAppSecret();
