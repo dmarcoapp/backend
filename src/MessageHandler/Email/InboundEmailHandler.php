@@ -8,19 +8,18 @@ use App\Entity\Email\Email;
 use App\Message\Email\InboundEmail;
 use App\Message\Email\ProcessEmail;
 use App\Repository\Email\EmailRepository;
-use App\Repository\User\UserRepository;
+use App\Service\Email\AggregateReportPostboxResolver;
 use App\Service\User\BlocklistMatcher;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Mime\Address;
-use Symfony\Component\String\ByteString;
 
 #[AsMessageHandler]
 final readonly class InboundEmailHandler
 {
     public function __construct(
-        private UserRepository $userRepository,
+        private AggregateReportPostboxResolver $postboxResolver,
         private EmailRepository $emailRepository,
         private MessageBusInterface $messageBus,
         private BlocklistMatcher $blocklistMatcher,
@@ -54,8 +53,9 @@ final readonly class InboundEmailHandler
             return;
         }
 
-        $postboxIdentifier = new ByteString($toAddress)->before('@')->toString();
-        $user = $this->userRepository->findOneBy(['sharedPostboxIdentifierToken' => $postboxIdentifier]);
+        // The webhook already rejected an unknown recipient, so this only
+        // catches an owner that disappeared in between.
+        $user = $this->postboxResolver->resolveUser($toAddress);
 
         if (!$user) {
             $this->logger->error('User not found for email.', [

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
+use App\Entity\User\User;
 use App\Message\Email\InboundEmail;
+use App\Repository\User\UserRepository;
+use App\Service\Email\AggregateReportPostboxResolver;
+use App\Service\Email\InboundReportEmailWebhookSignatureVerifier;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -29,7 +33,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
     public function testWebhookRejectsInvalidSignature(): void
     {
-        $timestamp = '1700000000';
+        $timestamp = (string) time();
 
         $response = $this->requestJson(
             method: 'POST',
@@ -50,7 +54,7 @@ final class WebhookEndpointTest extends ApiTestCase
         unset($payload['email_id']);
 
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
-        $timestamp = '1700000000';
+        $timestamp = (string) time();
         $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
@@ -71,7 +75,7 @@ final class WebhookEndpointTest extends ApiTestCase
     {
         $payload = $this->validWebhookPayload();
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
-        $timestamp = '1700000000';
+        $timestamp = (string) time();
         $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
@@ -93,10 +97,71 @@ final class WebhookEndpointTest extends ApiTestCase
             ],
             configureContainer: function (ContainerInterface $container) use ($messageBus): void {
                 $container->set(MessageBusInterface::class, $messageBus);
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(new User()));
             },
         );
 
         self::assertSame(200, $response->getStatusCode());
+    }
+
+    public function testWebhookRejectsStaleTimestamp(): void
+    {
+        $payload = $this->validWebhookPayload();
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $timestamp = (string) (time() - InboundReportEmailWebhookSignatureVerifier::MAX_CLOCK_SKEW_SECONDS - 60);
+        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+        // Correctly signed, so only the age of the timestamp can reject it.
+        $response = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/webhook/inbound_report_email',
+            payload: $payload,
+            headers: [
+                'x-timestamp' => $timestamp,
+                'x-signature' => 'sha256='.$signature,
+            ],
+        );
+
+        self::assertSame(401, $response->getStatusCode());
+    }
+
+    public function testWebhookRejectsUnknownRecipient(): void
+    {
+        $payload = $this->validWebhookPayload();
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $timestamp = (string) time();
+        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+        // A 404 is what tells the sender to drop the attachment it uploaded,
+        // so nothing accumulates in the bucket for addresses nobody owns.
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $messageBus->expects(self::never())->method('dispatch');
+
+        $response = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/webhook/inbound_report_email',
+            payload: $payload,
+            headers: [
+                'x-timestamp' => $timestamp,
+                'x-signature' => 'sha256='.$signature,
+            ],
+            configureContainer: function (ContainerInterface $container) use ($messageBus): void {
+                $container->set(MessageBusInterface::class, $messageBus);
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(null));
+            },
+        );
+
+        self::assertSame(404, $response->getStatusCode());
+    }
+
+    private function resolverReturning(?User $user): AggregateReportPostboxResolver
+    {
+        $userRepository = $this->createStub(UserRepository::class);
+        $userRepository->method('findOneBy')->willReturn($user);
+
+        return new AggregateReportPostboxResolver($userRepository);
     }
 
     private function validWebhookPayload(): array

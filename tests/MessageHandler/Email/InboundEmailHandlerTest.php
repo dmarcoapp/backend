@@ -14,6 +14,7 @@ use App\MessageHandler\Email\InboundEmailHandler;
 use App\Repository\Email\EmailRepository;
 use App\Repository\User\BlocklistEntryRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Email\AggregateReportPostboxResolver;
 use App\Service\User\BlocklistMatcher;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -48,7 +49,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -89,7 +90,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -131,7 +132,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler(
             $this->createInboundEmailMessage(from: '"DMARC Aggregate Report" <dmarcreport@microsoft.com>')
@@ -159,7 +160,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -190,7 +191,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler($this->createInboundEmailMessage(attachments: []));
     }
@@ -223,7 +224,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -261,7 +262,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler($userRepository, $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
         $handler($this->createInboundEmailMessage(from: '  invalid-from-address  '));
     }
 
