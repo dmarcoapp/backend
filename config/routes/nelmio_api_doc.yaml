@@ -1,10 +1,27 @@
-# Expose your documentation as JSON swagger compliant
-app.swagger:
-    path: /v1/doc.json
-    methods: GET
-    defaults: { _controller: nelmio_api_doc.controller.swagger }
+# The documentation stays open to anyone who can reach it, but not in
+# production: a self-hosted deployment should not publish the shape of its own
+# API, and of its auth endpoints in particular, merely by being installed. The
+# PUBLIC_ACCESS rule for this path stays in security.yaml, so that production
+# answers 404 here instead of the 401 that would give the route away.
+when@dev:
+    # Expose your documentation as JSON swagger compliant
+    app.swagger:
+        path: /v1/doc.json
+        methods: GET
+        defaults: { _controller: nelmio_api_doc.controller.swagger }
 
-app.swagger_ui:
-    path: /v1/doc
-    methods: GET
-    defaults: { _controller: nelmio_api_doc.controller.swagger_ui }
+    app.swagger_ui:
+        path: /v1/doc
+        methods: GET
+        defaults: { _controller: nelmio_api_doc.controller.swagger_ui }
+
+when@test:
+    app.swagger:
+        path: /v1/doc.json
+        methods: GET
+        defaults: { _controller: nelmio_api_doc.controller.swagger }
+
+    app.swagger_ui:
+        path: /v1/doc
+        methods: GET
+        defaults: { _controller: nelmio_api_doc.controller.swagger_ui }
