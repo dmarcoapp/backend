@@ -15,7 +15,7 @@ final readonly class LoginNotificationMailer
         private MailerInterface $mailer,
     ) {}
 
-    public function send(User $user, ?string $countryCode, ?string $ip, ?string $userAgent, \DateTimeInterface $occurredAt): void
+    public function send(User $user, ?string $ip, ?string $userAgent, \DateTimeInterface $occurredAt): void
     {
         if (!$user->isUnusualNewLoginNotificationEnabled()) {
             return;
@@ -28,11 +28,10 @@ final readonly class LoginNotificationMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($emailAddress))
-            ->subject('Unusual new login detected')
+            ->subject('New sign-in to your account')
             ->htmlTemplate('emails/user/login-notification.html.twig')
             ->context([
                 'name' => $user->getName(),
-                'countryCode' => $countryCode,
                 'ip' => $ip,
                 'userAgent' => $userAgent,
                 'occurredAt' => $occurredAt,

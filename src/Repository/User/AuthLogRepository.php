@@ -34,16 +34,16 @@ class AuthLogRepository extends ServiceEntityRepository
         ;
     }
 
-    public function hasLoginSuccessFromCountry(Uuid $userId, string $countryCode): bool
+    public function hasLoginSuccessFromIp(Uuid $userId, string $ip): bool
     {
         $result = $this->createQueryBuilder('log')
             ->select('log.id')
             ->where('log.userId = :userId')
             ->andWhere('log.action = :action')
-            ->andWhere('log.countryCode = :countryCode')
+            ->andWhere('log.ip = :ip')
             ->setParameter('userId', $userId, UuidType::NAME)
             ->setParameter('action', AuthLogAction::LOGIN_SUCCESS)
-            ->setParameter('countryCode', $countryCode)
+            ->setParameter('ip', $ip)
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult()

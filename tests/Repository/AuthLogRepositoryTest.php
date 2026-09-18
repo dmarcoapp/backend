@@ -21,9 +21,9 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
     {
         $user = $this->createVerifiedUser('authlog@example.com', 'Str0ngPassw0rd!@#');
 
-        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, 'HU');
-        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, 'DE');
-        $this->createAuthLog($user, AuthLogAction::LOGIN_FAILURE, 'HU');
+        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '203.0.113.10');
+        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '198.51.100.7');
+        $this->createAuthLog($user, AuthLogAction::LOGIN_FAILURE, '203.0.113.10');
 
         $repository = $this->entityManager->getRepository(AuthLog::class);
         self::assertInstanceOf(AuthLogRepository::class, $repository);
@@ -31,17 +31,17 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
         self::assertSame(2, $repository->countLoginSuccesses($user->getId()));
     }
 
-    public function testHasLoginSuccessFromCountry(): void
+    public function testHasLoginSuccessFromIp(): void
     {
-        $user = $this->createVerifiedUser('authlog-country@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createVerifiedUser('authlog-ip@example.com', 'Str0ngPassw0rd!@#');
 
-        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, 'HU');
+        $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '203.0.113.10');
 
         $repository = $this->entityManager->getRepository(AuthLog::class);
         self::assertInstanceOf(AuthLogRepository::class, $repository);
 
-        self::assertTrue($repository->hasLoginSuccessFromCountry($user->getId(), 'HU'));
-        self::assertFalse($repository->hasLoginSuccessFromCountry($user->getId(), 'DE'));
+        self::assertTrue($repository->hasLoginSuccessFromIp($user->getId(), '203.0.113.10'));
+        self::assertFalse($repository->hasLoginSuccessFromIp($user->getId(), '198.51.100.7'));
     }
 
     public function testDeleteOlderThanRemovesOnlyOldRows(): void
@@ -52,14 +52,14 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
         $oldLog
             ->setUserId($user->getId())
             ->setAction(AuthLogAction::LOGIN_SUCCESS)
-            ->setCountryCode('HU')
+            ->setIp('203.0.113.10')
             ->setCreatedAt(new \DateTimeImmutable('-10 days'))
         ;
         $newLog = new AuthLog();
         $newLog
             ->setUserId($user->getId())
             ->setAction(AuthLogAction::LOGIN_SUCCESS)
-            ->setCountryCode('HU')
+            ->setIp('203.0.113.10')
             ->setCreatedAt(new \DateTimeImmutable('-1 day'))
         ;
 
@@ -77,13 +77,13 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
         self::assertSame(1, $repository->count(['userId' => $user->getId()]));
     }
 
-    private function createAuthLog(User $user, AuthLogAction $action, ?string $countryCode): void
+    private function createAuthLog(User $user, AuthLogAction $action, ?string $ip): void
     {
         $log = new AuthLog();
         $log
             ->setUserId($user->getId())
             ->setAction($action)
-            ->setCountryCode($countryCode)
+            ->setIp($ip)
             ->setCreatedAt(new \DateTimeImmutable())
         ;
 

@@ -34,9 +34,6 @@ class AuthLog
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $userAgent = null;
 
-    #[ORM\Column(length: 2, nullable: true)]
-    private ?string $countryCode = null;
-
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -89,18 +86,6 @@ class AuthLog
     public function setUserAgent(?string $userAgent): static
     {
         $this->userAgent = $userAgent;
-
-        return $this;
-    }
-
-    public function getCountryCode(): ?string
-    {
-        return $this->countryCode;
-    }
-
-    public function setCountryCode(?string $countryCode): static
-    {
-        $this->countryCode = $countryCode;
 
         return $this;
     }

@@ -36,7 +36,6 @@ final class LoginNotificationMailerTest extends TestCase
         $service = new LoginNotificationMailer($mailer);
         $service->send(
             $user,
-            'HU',
             '203.0.113.10',
             'TestAgent',
             new \DateTimeImmutable('2025-01-01 00:00:00', new \DateTimeZone('UTC')),
@@ -59,7 +58,6 @@ final class LoginNotificationMailerTest extends TestCase
         $service = new LoginNotificationMailer($mailer);
         $service->send(
             $user,
-            'HU',
             '203.0.113.10',
             'TestAgent',
             new \DateTimeImmutable('2025-01-01 00:00:00', new \DateTimeZone('UTC')),
@@ -80,7 +78,6 @@ final class LoginNotificationMailerTest extends TestCase
         $service = new LoginNotificationMailer($mailer);
         $service->send(
             $user,
-            'HU',
             '203.0.113.10',
             'TestAgent',
             new \DateTimeImmutable('2025-01-01 00:00:00', new \DateTimeZone('UTC')),

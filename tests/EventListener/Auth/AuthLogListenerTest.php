@@ -37,7 +37,6 @@ final class AuthLogListenerTest extends TestCase
     public function testLoginSuccessDoesNotNotifyOnFirstLogin(): void
     {
         $request = Request::create('/v1/auth/login_check', 'POST');
-        $request->headers->set('CF-IPCountry', 'hu');
         $request->headers->set('User-Agent', 'TestAgent');
         $request->server->set('REMOTE_ADDR', '203.0.113.10');
 
@@ -50,7 +49,7 @@ final class AuthLogListenerTest extends TestCase
 
         $authLogRepository = $this->createMock(AuthLogRepository::class);
         $authLogRepository->expects(self::once())->method('countLoginSuccesses')->willReturn(0);
-        $authLogRepository->expects(self::never())->method('hasLoginSuccessFromCountry');
+        $authLogRepository->expects(self::never())->method('hasLoginSuccessFromIp');
 
         $mailer = $this->createMailer(self::never());
 
@@ -67,10 +66,9 @@ final class AuthLogListenerTest extends TestCase
         $listener->onLoginSuccess($event);
     }
 
-    public function testLoginSuccessNotifiesOnNewCountry(): void
+    public function testLoginSuccessNotifiesOnNewIp(): void
     {
         $request = Request::create('/v1/auth/login_check', 'POST');
-        $request->headers->set('CF-IPCountry', 'HU');
         $request->headers->set('User-Agent', 'TestAgent');
         $request->server->set('REMOTE_ADDR', '203.0.113.10');
 
@@ -84,8 +82,8 @@ final class AuthLogListenerTest extends TestCase
         $authLogRepository = $this->createMock(AuthLogRepository::class);
         $authLogRepository->expects(self::once())->method('countLoginSuccesses')->willReturn(2);
         $authLogRepository->expects(self::once())
-            ->method('hasLoginSuccessFromCountry')
-            ->with(self::isInstanceOf(Uuid::class), 'HU')
+            ->method('hasLoginSuccessFromIp')
+            ->with(self::isInstanceOf(Uuid::class), '203.0.113.10')
             ->willReturn(false)
         ;
 
@@ -107,7 +105,6 @@ final class AuthLogListenerTest extends TestCase
     public function testLoginSuccessDoesNotNotifyWhenNotificationDisabled(): void
     {
         $request = Request::create('/v1/auth/login_check', 'POST');
-        $request->headers->set('CF-IPCountry', 'HU');
         $request->headers->set('User-Agent', 'TestAgent');
         $request->server->set('REMOTE_ADDR', '203.0.113.10');
 
@@ -121,8 +118,8 @@ final class AuthLogListenerTest extends TestCase
         $authLogRepository = $this->createMock(AuthLogRepository::class);
         $authLogRepository->expects(self::once())->method('countLoginSuccesses')->willReturn(2);
         $authLogRepository->expects(self::once())
-            ->method('hasLoginSuccessFromCountry')
-            ->with(self::isInstanceOf(Uuid::class), 'HU')
+            ->method('hasLoginSuccessFromIp')
+            ->with(self::isInstanceOf(Uuid::class), '203.0.113.10')
             ->willReturn(false)
         ;
 

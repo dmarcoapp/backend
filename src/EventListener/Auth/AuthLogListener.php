@@ -45,12 +45,11 @@ final readonly class AuthLogListener
             return;
         }
 
-        $countryCode = $this->resolveCountryCode($request);
-        if (null !== $countryCode && $this->shouldNotifyNewCountry($userId, $countryCode)) {
+        $ip = $request->getClientIp();
+        if (null !== $ip && $this->shouldNotifyNewIp($userId, $ip)) {
             $this->loginNotificationMailer->send(
                 $user,
-                $countryCode,
-                $request->getClientIp(),
+                $ip,
                 $request->headers->get('User-Agent'),
                 new \DateTimeImmutable(),
             );
@@ -116,35 +115,26 @@ final readonly class AuthLogListener
         $audit->setUserId($userId);
         $audit->setIp($request->getClientIp());
         $audit->setUserAgent($request->headers->get('User-Agent'));
-        $audit->setCountryCode($this->resolveCountryCode($request));
         $audit->setCreatedAt(new \DateTimeImmutable());
 
         $this->entityManager->persist($audit);
         $this->entityManager->flush();
     }
 
-    private function resolveCountryCode(Request $request): ?string
-    {
-        $countryCode = $request->headers->get('CF-IPCountry');
-        if (null === $countryCode) {
-            return null;
-        }
-
-        $countryCode = strtoupper(trim($countryCode));
-        if (!preg_match('/^[A-Z]{2}$/', $countryCode)) {
-            return null;
-        }
-
-        return $countryCode;
-    }
-
-    private function shouldNotifyNewCountry(Uuid $userId, string $countryCode): bool
+    /**
+     * The address comes from the connection and the configured trusted proxies,
+     * unlike the CF-IPCountry header this used to read, which any client could
+     * set: forging it raised notifications, and repeating a country the account
+     * had already used silenced the real ones. A self-hosted deployment has no
+     * Cloudflare in front of it either, so that header was never even present.
+     */
+    private function shouldNotifyNewIp(Uuid $userId, string $ip): bool
     {
         $successCount = $this->authLogRepository->countLoginSuccesses($userId);
         if (0 === $successCount) {
             return false;
         }
 
-        return !$this->authLogRepository->hasLoginSuccessFromCountry($userId, $countryCode);
+        return !$this->authLogRepository->hasLoginSuccessFromIp($userId, $ip);
     }
 }
