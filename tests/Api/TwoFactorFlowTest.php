@@ -53,6 +53,37 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
         self::assertNotEmpty($payload['token'] ?? null);
     }
 
+    public function testRepeatedWrongTwoFactorCodesAreThrottled(): void
+    {
+        $this->createVerifiedUser('twofactor-bruteforce@example.com', 'Str0ngPassw0rd!@#');
+
+        // The limiter pool is on disk in this environment, so it outlives the run.
+        self::getContainer()->get('limiter.two_factor')
+            ->create('twofactor-bruteforce@example.com')
+            ->reset()
+        ;
+        self::ensureKernelShutdown();
+
+        // The password is accepted every time, so login throttling never counts
+        // these as failures. Only the two-factor limiter stops them.
+        $statusCodes = [];
+        for ($attempt = 0; $attempt < 6; ++$attempt) {
+            $response = $this->requestJson(
+                method: 'POST',
+                uri: '/v1/auth/login_check',
+                payload: [
+                    'username' => 'twofactor-bruteforce@example.com',
+                    'password' => 'Str0ngPassw0rd!@#',
+                    'two_factor_code' => '000000',
+                ],
+            );
+            $statusCodes[] = $response->getStatusCode();
+            self::ensureKernelShutdown();
+        }
+
+        self::assertSame([401, 401, 401, 401, 401, 429], $statusCodes);
+    }
+
     public function testEnableAndDisableAppTwoFactor(): void
     {
         $this->createVerifiedUser('twofactor-app@example.com', 'Str0ngPassw0rd!@#');

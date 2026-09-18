@@ -7,6 +7,7 @@ namespace App\EventListener\Auth;
 use App\Entity\User\AuthLog;
 use App\Entity\User\User;
 use App\Enum\Auth\AuthLogAction;
+use App\Event\Auth\TwoFactorFailureEvent;
 use App\Repository\User\AuthLogRepository;
 use App\Service\User\LoginNotificationMailer;
 use Doctrine\ORM\EntityManagerInterface;
@@ -57,6 +58,30 @@ final readonly class AuthLogListener
 
         $this->log(
             action: AuthLogAction::LOGIN_SUCCESS,
+            userId: $userId,
+            request: $request,
+        );
+    }
+
+    /**
+     * A wrong two-factor code leaves the password check successful, so no
+     * LoginFailureEvent is dispatched and the attempt would go unrecorded.
+     */
+    #[AsEventListener]
+    public function onTwoFactorFailure(TwoFactorFailureEvent $event): void
+    {
+        $userId = $event->getUser()->getId();
+        if (!$userId instanceof Uuid) {
+            return;
+        }
+
+        $request = $this->requestStack->getCurrentRequest();
+        if (!$request instanceof Request) {
+            return;
+        }
+
+        $this->log(
+            action: AuthLogAction::TWO_FACTOR_FAILURE,
             userId: $userId,
             request: $request,
         );

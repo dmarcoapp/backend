@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Entity\User\User;
 use App\Enum\User\TwoFactorMethod;
+use App\Event\Auth\TwoFactorFailureEvent;
 use App\Helper\Base32Codec;
 use App\Security\Authentication\TwoFactorAuthenticationSuccessHandler;
 use App\Service\User\TwoFactor\TwoFactorCodeMailer;
@@ -17,10 +18,14 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\Rule\InvokedCount;
 use PHPUnit\Framework\TestCase;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\RawMessage;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\Authentication\AuthenticationSuccessHandlerInterface;
@@ -39,7 +44,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $token = $this->createStub(TokenInterface::class);
         $token->method('getUser')->willReturn(new class implements UserInterface {
@@ -69,7 +74,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::once());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setEmail('user@example.com');
@@ -96,7 +101,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
@@ -123,7 +128,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
@@ -147,7 +152,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setTwoFactorMethod(TwoFactorMethod::APP);
@@ -172,7 +177,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
@@ -196,7 +201,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::never());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
@@ -220,7 +225,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::once());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setEmail('json-invalid@example.com');
@@ -246,7 +251,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::once());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setEmail('empty-code@example.com');
@@ -273,7 +278,7 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         $service = $this->createService();
         $mailer = $this->createMailer(self::once());
 
-        $handler = new TwoFactorAuthenticationSuccessHandler($inner, $service, new TwoFactorCodeMailer($mailer));
+        $handler = $this->createHandler($inner, $service, $mailer);
 
         $user = new User();
         $user->setEmail('scalar-json@example.com');
@@ -289,6 +294,153 @@ final class TwoFactorAuthenticationSuccessHandlerTest extends TestCase
         self::assertSame(401, $response->getStatusCode());
         $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('two_factor_required', $payload['error'] ?? null);
+    }
+
+    public function testRepeatedInvalidCodesAreThrottled(): void
+    {
+        $inner = $this->createMock(AuthenticationSuccessHandlerInterface::class);
+        $inner->expects(self::never())->method('onAuthenticationSuccess');
+
+        $service = $this->createService();
+        $handler = $this->createHandler($inner, $service, $this->createMailer(self::never()), $this->createLimiterFactory(3));
+
+        $user = new User();
+        $user->setEmail('brute-force@example.com');
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+        $token = $this->createStub(TokenInterface::class);
+        $token->method('getUser')->willReturn($user);
+
+        $request = new Request(content: json_encode(['two_factor_code' => '000000'], JSON_THROW_ON_ERROR));
+
+        for ($attempt = 0; $attempt < 3; ++$attempt) {
+            self::assertSame(401, $handler->onAuthenticationSuccess($request, $token)->getStatusCode());
+        }
+
+        $response = $handler->onAuthenticationSuccess($request, $token);
+
+        self::assertSame(429, $response->getStatusCode());
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('two_factor_throttled', $payload['error'] ?? null);
+    }
+
+    public function testThrottlingIsPerUser(): void
+    {
+        $inner = $this->createMock(AuthenticationSuccessHandlerInterface::class);
+        $inner->expects(self::never())->method('onAuthenticationSuccess');
+
+        $service = $this->createService();
+        $handler = $this->createHandler($inner, $service, $this->createMailer(self::never()), $this->createLimiterFactory(1));
+
+        $request = new Request(content: json_encode(['two_factor_code' => '000000'], JSON_THROW_ON_ERROR));
+
+        $exhausted = $this->createTokenForUser('exhausted@example.com');
+        self::assertSame(401, $handler->onAuthenticationSuccess($request, $exhausted)->getStatusCode());
+        self::assertSame(429, $handler->onAuthenticationSuccess($request, $exhausted)->getStatusCode());
+
+        $other = $this->createTokenForUser('untouched@example.com');
+        self::assertSame(401, $handler->onAuthenticationSuccess($request, $other)->getStatusCode());
+    }
+
+    public function testInvalidCodeDispatchesFailureEvent(): void
+    {
+        $inner = $this->createMock(AuthenticationSuccessHandlerInterface::class);
+        $inner->expects(self::never())->method('onAuthenticationSuccess');
+
+        $user = new User();
+        $user->setEmail('logged@example.com');
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+        $token = $this->createStub(TokenInterface::class);
+        $token->method('getUser')->willReturn($user);
+
+        $eventDispatcher = $this->createMock(EventDispatcherInterface::class);
+        $eventDispatcher
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(TwoFactorFailureEvent::class))
+            ->willReturnArgument(0)
+        ;
+
+        $handler = $this->createHandler(
+            $inner,
+            $this->createService(),
+            $this->createMailer(self::never()),
+            null,
+            $eventDispatcher,
+        );
+
+        $request = new Request(content: json_encode(['two_factor_code' => '000000'], JSON_THROW_ON_ERROR));
+
+        self::assertSame(401, $handler->onAuthenticationSuccess($request, $token)->getStatusCode());
+    }
+
+    public function testValidCodeClearsEarlierFailedAttempts(): void
+    {
+        $inner = $this->createMock(AuthenticationSuccessHandlerInterface::class);
+        $inner->expects(self::exactly(2))->method('onAuthenticationSuccess')->willReturn(new JsonResponse(['token' => 'ok']));
+
+        $service = $this->createService();
+        $handler = $this->createHandler($inner, $service, $this->createMailer(self::never()), $this->createLimiterFactory(2));
+
+        $user = new User();
+        $user->setEmail('typo@example.com');
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+        $token = $this->createStub(TokenInterface::class);
+        $token->method('getUser')->willReturn($user);
+
+        $wrong = new Request(content: json_encode(['two_factor_code' => '000000'], JSON_THROW_ON_ERROR));
+        $right = new Request(content: json_encode(['two_factor_code' => $service->getEmailCode($user)], JSON_THROW_ON_ERROR));
+
+        self::assertSame(401, $handler->onAuthenticationSuccess($wrong, $token)->getStatusCode());
+        self::assertSame(200, $handler->onAuthenticationSuccess($right, $token)->getStatusCode());
+
+        // The successful attempt released the budget the typo had taken.
+        self::assertSame(401, $handler->onAuthenticationSuccess($wrong, $token)->getStatusCode());
+        self::assertSame(200, $handler->onAuthenticationSuccess($right, $token)->getStatusCode());
+    }
+
+    private function createTokenForUser(string $email): TokenInterface
+    {
+        $user = new User();
+        $user->setEmail($email);
+        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
+        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
+
+        $token = $this->createStub(TokenInterface::class);
+        $token->method('getUser')->willReturn($user);
+
+        return $token;
+    }
+
+    private function createHandler(
+        AuthenticationSuccessHandlerInterface $inner,
+        TwoFactorService $service,
+        MailerInterface $mailer,
+        ?RateLimiterFactoryInterface $limiter = null,
+        ?EventDispatcherInterface $eventDispatcher = null,
+    ): TwoFactorAuthenticationSuccessHandler {
+        return new TwoFactorAuthenticationSuccessHandler(
+            $inner,
+            $service,
+            new TwoFactorCodeMailer($mailer),
+            $limiter ?? $this->createLimiterFactory(),
+            $eventDispatcher ?? $this->createStub(EventDispatcherInterface::class),
+        );
+    }
+
+    private function createLimiterFactory(int $limit = 5): RateLimiterFactoryInterface
+    {
+        return new RateLimiterFactory(
+            [
+                'id' => 'two_factor',
+                'interval' => '15 minutes',
+                'limit' => $limit,
+                'policy' => 'fixed_window',
+            ],
+            new InMemoryStorage(),
+        );
     }
 
     private function createService(): TwoFactorService

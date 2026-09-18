@@ -11,6 +11,10 @@ framework:
                 adapter: cache.adapter.array
             logged_in_api_rate_limiter_pool:
                 adapter: cache.adapter.array
+            # Filesystem rather than array, so the limiter's state survives the
+            # kernel reboot between two requests of the same test.
+            two_factor_rate_limiter_pool:
+                adapter: cache.adapter.filesystem
             dashboard_cache_pool:
                 adapter: cache.adapter.array
             ip_lookup_cache_pool:

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\EventListener\Auth;
 
+use App\Entity\User\AuthLog;
 use App\Entity\User\User;
+use App\Enum\Auth\AuthLogAction;
+use App\Event\Auth\TwoFactorFailureEvent;
 use App\EventListener\Auth\AuthLogListener;
 use App\Repository\User\AuthLogRepository;
 use App\Service\User\LoginNotificationMailer;
@@ -197,6 +200,56 @@ final class AuthLogListenerTest extends TestCase
         );
 
         $listener->onLoginFailure($event);
+    }
+
+    public function testTwoFactorFailurePersistsLog(): void
+    {
+        $request = Request::create('/v1/auth/login_check', 'POST');
+        $request->headers->set('User-Agent', 'TestAgent');
+        $request->server->set('REMOTE_ADDR', '203.0.113.10');
+
+        $requestStack = new RequestStack();
+        $requestStack->push($request);
+
+        $persisted = null;
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager
+            ->expects(self::once())
+            ->method('persist')
+            ->willReturnCallback(static function (object $entity) use (&$persisted): void {
+                $persisted = $entity;
+            })
+        ;
+        $entityManager->expects(self::once())->method('flush');
+
+        $listener = new AuthLogListener(
+            $entityManager,
+            $requestStack,
+            $this->createStub(AuthLogRepository::class),
+            new LoginNotificationMailer($this->createMailer(self::never())),
+        );
+
+        $listener->onTwoFactorFailure(new TwoFactorFailureEvent($this->createUserWithId()));
+
+        self::assertInstanceOf(AuthLog::class, $persisted);
+        self::assertSame(AuthLogAction::TWO_FACTOR_FAILURE, $persisted->getAction());
+        self::assertSame('203.0.113.10', $persisted->getIp());
+    }
+
+    public function testTwoFactorFailureSkipsWithoutARequest(): void
+    {
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects(self::never())->method('persist');
+        $entityManager->expects(self::never())->method('flush');
+
+        $listener = new AuthLogListener(
+            $entityManager,
+            new RequestStack(),
+            $this->createStub(AuthLogRepository::class),
+            new LoginNotificationMailer($this->createMailer(self::never())),
+        );
+
+        $listener->onTwoFactorFailure(new TwoFactorFailureEvent($this->createUserWithId()));
     }
 
     private function createUserWithId(): User

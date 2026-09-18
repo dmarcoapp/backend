@@ -21,6 +21,8 @@ framework:
                 adapter: cache.adapter.redis
             logged_in_api_rate_limiter_pool:
                 adapter: cache.adapter.redis
+            two_factor_rate_limiter_pool:
+                adapter: cache.adapter.redis
             dashboard_cache_pool:
                 adapter: cache.adapter.redis
             ip_lookup_cache_pool:

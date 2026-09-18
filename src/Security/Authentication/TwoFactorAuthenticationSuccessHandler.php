@@ -6,12 +6,15 @@ namespace App\Security\Authentication;
 
 use App\Entity\User\User;
 use App\Enum\User\TwoFactorMethod;
+use App\Event\Auth\TwoFactorFailureEvent;
 use App\Service\User\TwoFactor\TwoFactorCodeMailer;
 use App\Service\User\TwoFactor\TwoFactorService;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Http\Authentication\AuthenticationSuccessHandlerInterface;
 
@@ -22,6 +25,8 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
         private AuthenticationSuccessHandlerInterface $inner,
         private TwoFactorService $twoFactorService,
         private TwoFactorCodeMailer $twoFactorCodeMailer,
+        private RateLimiterFactoryInterface $twoFactorLimiter,
+        private EventDispatcherInterface $eventDispatcher,
     ) {}
 
     #[\Override]
@@ -46,7 +51,24 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
             );
         }
 
+        // Login throttling only counts authentication failures, and a wrong code
+        // is not one: the password was accepted, so the limiter never sees the
+        // attempt. Without this the six digits can be guessed at will.
+        $limiter = $this->twoFactorLimiter->create($user->getUserIdentifier());
+        if (!$limiter->consume()->isAccepted()) {
+            return new JsonResponse(
+                [
+                    'code' => Response::HTTP_TOO_MANY_REQUESTS,
+                    'message' => 'Too many two-factor attempts.',
+                    'error' => 'two_factor_throttled',
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
         if (!$this->twoFactorService->isValidCode($user, $code)) {
+            $this->eventDispatcher->dispatch(new TwoFactorFailureEvent($user));
+
             return new JsonResponse(
                 [
                     'code' => Response::HTTP_UNAUTHORIZED,
@@ -56,6 +78,8 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
                 Response::HTTP_UNAUTHORIZED
             );
         }
+
+        $limiter->reset();
 
         return $this->inner->onAuthenticationSuccess($request, $token);
     }
