@@ -1,21 +1,18 @@
-<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
 
-    <p style="margin: 0 0 16px 0;">
-        Your DMARCo one-time login code is:
+{% block preheader %}Your DMARCo sign-in code is {{ code }}.{% endblock %}
+
+{% block content %}
+    {{ ui.title('Your sign-in code') }}
+
+    <p style="margin: 0 0 16px 0;">Hi{{ name ? ' ' ~ name : '' }},</p>
+
+    <p style="margin: 0 0 12px 0;">Enter this code to finish signing in to DMARCo:</p>
+
+    <p style="margin: 0 0 20px 0;">
+        <span style="display: inline-block; padding: 10px 16px; background-color: #f4f3f6; border: 1px solid #e3e1e8; border-radius: 6px; font-family: Menlo, Consolas, 'Courier New', monospace; font-size: 24px; font-weight: 700; letter-spacing: 4px; color: #1a1720;">{{ code }}</span>
     </p>
 
-    <p style="margin: 0 0 16px 0;">
-        <span style="display: inline-block; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 20px; letter-spacing: 2px; font-weight: bold;">{{ code }}</span>
-    </p>
-
-    <p style="margin: 0 0 16px 0;">
-        This code expires in a few minutes.
-    </p>
-
-    <p style="margin: 0 0 16px 0;">
-        If you did not attempt to sign in, please contact support.
-    </p>
-
-    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
-</div>
+    {{ ui.note('The code expires in a few minutes. If you did not try to sign in, someone may know your password: change it right away.') }}
+{% endblock %}

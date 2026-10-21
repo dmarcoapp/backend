@@ -1,0 +1,12 @@
+{#
+    Plain-text frame of every DMARCo email, the counterpart of base.html.twig.
+    Twig drops the newline after a tag, so a tag on its own line leaves no
+    trace in the output.
+#}
+{% block content %}{% endblock %}
+
+--
+{% if block('footer') is defined %}
+{{ block('footer')|trim }}
+{% endif %}
+Sent by DMARCo at {{ frontend_url }}

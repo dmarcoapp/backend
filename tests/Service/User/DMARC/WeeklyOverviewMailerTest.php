@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\User\DMARC;
 
-use App\DTO\Output\User\Dashboard;
+use App\DTO\Output\User\WeeklyOverview\DomainSummary;
+use App\DTO\Output\User\WeeklyOverview\TrafficTotals;
+use App\DTO\Output\User\WeeklyOverview\WeeklyOverview;
 use App\Entity\User\User;
 use App\Service\User\DMARC\WeeklyOverviewMailer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\Mailer\MailerInterface;
-use Symfony\Component\Mime\RawMessage;
 
 /**
  * @internal
@@ -20,27 +22,24 @@ final class WeeklyOverviewMailerTest extends TestCase
 {
     public function testSendUsesMailerWhenUserHasEmailAndNotificationEnabled(): void
     {
-        $user = new User();
-        $user
-            ->setName('Weekly User')
-            ->setEmail('weekly@example.com')
-            ->setSharedPostboxIdentifierToken('token')
-        ;
+        $overview = WeeklyOverviewFixture::needingAttention();
 
         $mailer = $this->createMock(MailerInterface::class);
         $mailer
             ->expects(self::once())
             ->method('send')
-            ->with(self::isInstanceOf(RawMessage::class))
+            ->with(self::callback(static function (TemplatedEmail $email) use ($overview): bool {
+                self::assertSame('weekly@example.com', $email->getTo()[0]->getAddress());
+                self::assertSame('DMARC weekly, Oct 12–18: example.org needs attention', $email->getSubject());
+                self::assertSame('emails/user/dmarc/weekly-overview.html.twig', $email->getHtmlTemplate());
+                self::assertSame('emails/user/dmarc/weekly-overview.txt.twig', $email->getTextTemplate());
+                self::assertSame(['overview' => $overview, 'recipient' => 'weekly@example.com'], $email->getContext());
+
+                return true;
+            }))
         ;
 
-        $service = new WeeklyOverviewMailer($mailer);
-        $service->send(
-            $user,
-            $this->createDashboard(),
-            new \DateTimeImmutable('2025-01-05 00:00:00'),
-            new \DateTimeImmutable('2025-01-11 23:59:59'),
-        );
+        new WeeklyOverviewMailer($mailer)->send($this->createUser(), $overview);
     }
 
     public function testSendDoesNothingWhenUserEmailIsMissing(): void
@@ -54,83 +53,62 @@ final class WeeklyOverviewMailerTest extends TestCase
         $mailer = $this->createMock(MailerInterface::class);
         $mailer->expects(self::never())->method('send');
 
-        $service = new WeeklyOverviewMailer($mailer);
-        $service->send(
-            $user,
-            $this->createDashboard(),
-            new \DateTimeImmutable('2025-01-05 00:00:00'),
-            new \DateTimeImmutable('2025-01-11 23:59:59'),
-        );
+        new WeeklyOverviewMailer($mailer)->send($user, WeeklyOverviewFixture::healthy());
     }
 
     public function testSendDoesNothingWhenNotificationDisabled(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::never())->method('send');
+
+        new WeeklyOverviewMailer($mailer)->send(
+            $this->createUser()->setWeeklyOverviewNotificationEnabled(false),
+            WeeklyOverviewFixture::healthy(),
+        );
+    }
+
+    public function testSubjectSaysWhatTheWeekCameDownTo(): void
+    {
+        self::assertSame('DMARC weekly, Oct 12–18: no issues found', WeeklyOverviewMailer::subject(WeeklyOverviewFixture::healthy()));
+        self::assertSame('DMARC weekly, Oct 12–18: no reports received', WeeklyOverviewMailer::subject(WeeklyOverviewFixture::withoutReports()));
+
+        $attention = static fn (string $name): DomainSummary => new DomainSummary(
+            domain: $name,
+            domainId: null,
+            policy: 'none',
+            policyPercent: null,
+            subdomainPolicy: null,
+            isNew: false,
+            needsAttention: true,
+            traffic: new TrafficTotals(10, 5, 5, 0),
+        );
+        $base = WeeklyOverviewFixture::healthy();
+        $twoDomains = new WeeklyOverview(
+            periodStart: $base->periodStart,
+            periodEnd: $base->periodEnd,
+            previousPeriodStart: $base->previousPeriodStart,
+            previousPeriodEnd: $base->previousPeriodEnd,
+            reportCount: $base->reportCount,
+            reportingOrganizations: $base->reportingOrganizations,
+            traffic: $base->traffic,
+            previousTraffic: $base->previousTraffic,
+            domains: [$attention('example.org'), $attention('example.net')],
+            findings: [],
+            reportAddress: $base->reportAddress,
+        );
+
+        self::assertSame('DMARC weekly, Oct 12–18: 2 domains need attention', WeeklyOverviewMailer::subject($twoDomains));
+    }
+
+    private function createUser(): User
     {
         $user = new User();
         $user
             ->setName('Weekly User')
             ->setEmail('weekly@example.com')
             ->setSharedPostboxIdentifierToken('token')
-            ->setWeeklyOverviewNotificationEnabled(false)
         ;
 
-        $mailer = $this->createMock(MailerInterface::class);
-        $mailer->expects(self::never())->method('send');
-
-        $service = new WeeklyOverviewMailer($mailer);
-        $service->send(
-            $user,
-            $this->createDashboard(),
-            new \DateTimeImmutable('2025-01-05 00:00:00'),
-            new \DateTimeImmutable('2025-01-11 23:59:59'),
-        );
-    }
-
-    private function createDashboard(): Dashboard
-    {
-        return new Dashboard(
-            reportCount: 10,
-            reportTrend: 5.0,
-            messageCount: 100,
-            messageTrend: 10.0,
-            passRate: 0.9,
-            passTrend: 2.0,
-            threatsBlockedCount: 3,
-            threatsBlockedTrend: -5.0,
-            messageCountByDate: ['2025-01-05' => 1],
-            threatCountByDate: ['2025-01-05' => 0],
-            compliance: ['dmarc' => 95.0, 'dkim' => 90.0, 'spf' => 85.0],
-            complianceTrend: ['dmarc' => 1.0, 'dkim' => 1.5, 'spf' => 2.0],
-            newDomainCount: 1,
-            newDomainTrend: 0.0,
-            newDomains: ['example.com'],
-            topOffenders: [[
-                'count' => 2,
-                'sourceIp' => '198.51.100.1',
-                'sourceIpInfo' => [
-                    'orgAbuseEmail' => 'abuse@example.net',
-                    'orgCountry' => 'HU',
-                    'orgName' => 'Example Org',
-                    'orgTechEmail' => 'tech@example.net',
-                ],
-            ]],
-            topSenders: [[
-                'count' => 4,
-                'sourceIp' => '198.51.100.2',
-                'sourceIpInfo' => [
-                    'orgAbuseEmail' => 'abuse-sender@example.net',
-                    'orgCountry' => 'US',
-                    'orgName' => 'Sender Org',
-                    'orgTechEmail' => 'tech-sender@example.net',
-                ],
-            ]],
-            sourceCountryDistribution: [[
-                'count' => 4,
-                'country' => 'US',
-            ]],
-            topReportingOrganizations: [[
-                'count' => 3,
-                'reportingOrganization' => 'Example Reporter',
-            ]],
-        );
+        return $user;
     }
 }

@@ -37,8 +37,9 @@ final readonly class PasswordResetMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($emailAddress))
-            ->subject('Password reset request')
+            ->subject('Reset your DMARCo password')
             ->htmlTemplate('emails/user/password-reset.html.twig')
+            ->textTemplate('emails/user/password-reset.txt.twig')
             ->context([
                 'name' => $user->getName(),
                 'tokenEmail' => $user->getEmail(),

@@ -19,8 +19,9 @@ final readonly class TwoFactorCodeMailer
     {
         $email = new TemplatedEmail()
             ->to(new Address($user->getEmail() ?? ''))
-            ->subject('Your DMARCo login code')
+            ->subject('Your DMARCo sign-in code')
             ->htmlTemplate('emails/user/two-factor-code.html.twig')
+            ->textTemplate('emails/user/two-factor-code.txt.twig')
             ->context([
                 'code' => $code,
                 'name' => $user->getName(),

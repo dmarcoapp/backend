@@ -10,8 +10,9 @@ use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 use Symfony\Component\Uid\Uuid;
 
-// At 00:01 on Monday.
-#[AsCronTask(expression: '1 0 * * 1', timezone: 'UTC')]
+// At 06:00 on Tuesday. The overview covers the week up to Sunday, and the
+// reports for a day arrive during the next one, so Monday is too early.
+#[AsCronTask(expression: '0 6 * * 2', timezone: 'UTC')]
 final readonly class ProcessUserWeeklyProducer
 {
     public function __construct(

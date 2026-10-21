@@ -1,0 +1,12 @@
+{% extends 'emails/base.txt.twig' %}
+
+{% block content %}
+Hi{{ name ? ' ' ~ name : '' }},
+
+Enter this code to finish signing in to DMARCo:
+
+    {{ code }}
+
+The code expires in a few minutes. If you did not try to sign in, someone may
+know your password: change it right away.
+{% endblock %}

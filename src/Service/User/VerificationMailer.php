@@ -37,8 +37,9 @@ final readonly class VerificationMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($emailAddress))
-            ->subject('Verify your email address!')
+            ->subject('Verify your email address')
             ->htmlTemplate('emails/user/email-verification.html.twig')
+            ->textTemplate('emails/user/email-verification.txt.twig')
             ->context([
                 'name' => $user->getName(),
                 'tokenEmail' => $user->getEmail(),

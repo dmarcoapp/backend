@@ -1,28 +1,37 @@
-<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
+
+{% block preheader %}Signed in from {{ ip ?? 'an unknown IP address' }}. If this was not you, reset your password.{% endblock %}
+
+{% block content %}
+    {{ ui.title('New sign-in to your account') }}
+
+    <p style="margin: 0 0 16px 0;">Hi{{ name ? ' ' ~ name : '' }},</p>
 
     <p style="margin: 0 0 16px 0;">
-        Your account was signed in to from an IP address we have not seen before.
+        Your DMARCo account was signed in to from an IP address it has not seen before.
     </p>
 
-    <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px 0; font-size: 14px; border-collapse: collapse;">
         <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>IP</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ ip ?? 'Unknown' }}</td>
+            <td width="90" valign="top" style="padding: 8px 12px 8px 0; border-bottom: 1px solid #efeef2; color: #55505f;">IP address</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #efeef2;">{{ ip ?? 'Unknown' }}</td>
         </tr>
         <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Device</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ userAgent ?? 'Unknown' }}</td>
+            <td width="90" valign="top" style="padding: 8px 12px 8px 0; border-bottom: 1px solid #efeef2; color: #55505f;">Device</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #efeef2; word-break: break-word;">{{ userAgent ?? 'Unknown' }}</td>
         </tr>
         <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Time</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ occurredAt|date('Y-m-d H:i:s T') }}</td>
+            <td width="90" valign="top" style="padding: 8px 12px 8px 0; color: #55505f;">Time</td>
+            <td style="padding: 8px 0;">{{ occurredAt|date('Y-m-d H:i T') }}</td>
         </tr>
     </table>
 
     <p style="margin: 0 0 16px 0;">
-        If this was not you, please reset your password immediately.
+        If this was you, there is nothing to do. If it was not, reset your password right away:
     </p>
 
-    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
-</div>
+    {{ ui.button(frontend_url ~ '/auth/forgot-password', 'Reset password') }}
+{% endblock %}
+
+{% block footer %}You can turn these alerts off in your <a href="{{ frontend_url }}/notifications" style="color: #6b6676;">notification settings</a>.{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'emails/base.txt.twig' %}
+
+{% block content %}
+Hi{{ name ? ' ' ~ name : '' }},
+
+From now on, DMARCo asks for a code from your authenticator app when you sign
+in, instead of emailing you one.
+
+If you did not make this change, reset your password and check the two-factor
+settings in your profile:
+
+{{ frontend_url }}/profile
+{% endblock %}

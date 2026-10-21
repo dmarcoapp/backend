@@ -24,8 +24,9 @@ final readonly class PasswordChangedMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($emailAddress))
-            ->subject('Password has been successfully changed')
+            ->subject('Your DMARCo password was changed')
             ->htmlTemplate('emails/user/password-change.html.twig')
+            ->textTemplate('emails/user/password-change.txt.twig')
             ->context([
                 'name' => $user->getName(),
             ])

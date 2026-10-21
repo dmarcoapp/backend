@@ -28,8 +28,9 @@ final readonly class LoginNotificationMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($emailAddress))
-            ->subject('New sign-in to your account')
+            ->subject('New sign-in to your DMARCo account')
             ->htmlTemplate('emails/user/login-notification.html.twig')
+            ->textTemplate('emails/user/login-notification.txt.twig')
             ->context([
                 'name' => $user->getName(),
                 'ip' => $ip,

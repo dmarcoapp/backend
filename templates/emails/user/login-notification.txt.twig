@@ -1,0 +1,21 @@
+{% extends 'emails/base.txt.twig' %}
+
+{% block content %}
+Hi{{ name ? ' ' ~ name : '' }},
+
+Your DMARCo account was signed in to from an IP address it has not seen before.
+
+  IP address  {{ ip ?? 'Unknown' }}
+  Device      {{ userAgent ?? 'Unknown' }}
+  Time        {{ occurredAt|date('Y-m-d H:i T') }}
+
+If this was you, there is nothing to do. If it was not, reset your password
+right away:
+
+{{ frontend_url }}/auth/forgot-password
+{% endblock %}
+
+{% block footer %}
+You can turn these alerts off in your notification settings:
+{{ frontend_url }}/notifications
+{% endblock %}

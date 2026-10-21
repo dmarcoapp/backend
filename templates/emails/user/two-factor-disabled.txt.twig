@@ -1,0 +1,13 @@
+{% extends 'emails/base.txt.twig' %}
+
+{% block content %}
+Hi{{ name ? ' ' ~ name : '' }},
+
+Your DMARCo account no longer uses an authenticator app. When you sign in, we
+email you a code instead.
+
+If you did not make this change, reset your password and check the two-factor
+settings in your profile:
+
+{{ frontend_url }}/profile
+{% endblock %}

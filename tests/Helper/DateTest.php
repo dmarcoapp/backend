@@ -40,7 +40,7 @@ final class DateTest extends TestCase
         $days = 2;
         $period = Date::createDatePeriod($days, true);
 
-        $end = new \DateTimeImmutable('-'.$days.'days');
+        $end = new \DateTimeImmutable('yesterday -'.$days.' days');
         $start = $end->sub(new \DateInterval('P'.($days - 1).'D'));
 
         $expected = [
@@ -54,5 +54,15 @@ final class DateTest extends TestCase
         }
 
         self::assertSame($expected, $actual);
+    }
+
+    public function testPreviousPeriodEndsWhereTheCurrentOneStarts(): void
+    {
+        $current = Date::createDatePeriod(7);
+        $previous = Date::createDatePeriod(7, true);
+
+        self::assertEquals($current->getStartDate(), $previous->getEndDate());
+        self::assertSame('00:00:00', $previous->getStartDate()->format('H:i:s'));
+        self::assertCount(7, iterator_to_array($previous));
     }
 }

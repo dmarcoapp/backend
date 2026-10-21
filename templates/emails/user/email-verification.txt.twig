@@ -1,0 +1,12 @@
+{% extends 'emails/base.txt.twig' %}
+
+{% block content %}
+Hi{{ name ? ' ' ~ name : '' }},
+
+Confirm that this is your address to finish setting up your DMARCo account:
+
+{{ frontend_url }}/auth/email-verify?email={{ tokenEmail|url_encode }}&token={{ token|url_encode }}
+
+The link works for {{ tokenLifetimeHours }} hours. If you did not create an
+account, you can ignore this email.
+{% endblock %}

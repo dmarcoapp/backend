@@ -1,160 +1,286 @@
-<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
+{% import _self as weekly %}
 
-    <p style="margin: 0 0 16px 0;">
-        Here is your DMARC weekly overview for
-        <strong>{{ periodStart|date('Y-m-d') }}</strong>
-        to
-        <strong>{{ periodEnd|date('Y-m-d') }}</strong>.
-    </p>
+{#
+    The weekly overview leads with a verdict, then four numbers, then up to
+    three things to look at, then every domain. Anything deeper is one click
+    away in the dashboard.
+#}
 
-    <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
+{% set attention = overview.domainsNeedingAttention %}
+{% set traffic = overview.traffic %}
+{% set previous = overview.previousTraffic %}
+{% set findings_shown = 3 %}
+{% set domains_shown = 10 %}
+{% set amber = '#b45309' %}
+{% set green = '#15803d' %}
+{% set muted = '#55505f' %}
+
+{% macro percent(rate) %}{% if rate is null %}–{% else %}{{ (rate * 100)|number_format(1) }}%{% endif %}{% endmacro %}
+
+{# "1 message", "2 messages" #}
+{% macro count(number, one, many) %}{{ number|number_format }} {{ number == 1 ? one : many }}{% endmacro %}
+
+{% macro source(source) %}
+    {%- set details = [source.orgName, source.orgCountry]|filter(v => v is not null) -%}
+    {{ source.ip }}{% if details is not empty %} ({{ details|join(', ') }}){% endif %}
+{%- endmacro %}
+
+{# Where the messages of a finding came from, as the end of "N messages from …". #}
+{% macro sources(finding, mid_sentence) %}
+    {%- import _self as weekly -%}
+    {%- if finding.sourceCount == 1 -%}
+        {{ weekly.source(finding.topSource) }}
+    {%- else -%}
+        {{ finding.sourceCount }} addresses, most of them from {{ weekly.source(finding.topSource) }}{{ mid_sentence ? ',' : '' }}
+    {%- endif -%}
+{% endmacro %}
+
+{# What receivers did with blocked mail, from the dispositions they reported. #}
+{% macro blocked_verb(quarantined, rejected) %}
+    {%- if quarantined == 0 %}rejected{% elseif rejected == 0 %}quarantined{% else %}rejected or quarantined{% endif -%}
+{% endmacro %}
+
+{# Why mail that failed DMARC still reached receivers, as the end of a sentence. #}
+{% macro why_delivered(domain) %}
+    {%- if domain.policy == 'none' %}, because its policy is p=none
+    {%- elseif domain.coversPartOfMail %}, because its policy covers only {{ domain.policyPercent }}% of mail
+    {%- elseif domain.leavesSubdomainsOpen %}, possibly from subdomains, which its policy leaves open (sp=none)
+    {%- elseif domain.isEnforced %}, at the receivers' own discretion
+    {%- endif -%}
+{% endmacro %}
+
+{# What stops failing mail from being delivered, for a domain that lets it through. #}
+{% macro next_step(domain) %}
+    {%- if domain.policy == 'none' %}Once your own senders pass, a p=quarantine policy stops this.
+    {%- elseif domain.coversPartOfMail %}Once your own senders pass, applying the policy to all mail (pct=100) stops this.
+    {%- elseif domain.leavesSubdomainsOpen %}An sp=quarantine policy stops this for subdomains.
+    {%- endif -%}
+{% endmacro %}
+
+{% macro kpi(label, value, change, value_color, change_color) %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Reports</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.reportCount }}</td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.reportTrend|number_format(2) }}%</td>
+            <td style="border: 1px solid #e3e1e8; border-radius: 6px; padding: 12px 14px;">
+                <div style="font-size: 12px; line-height: 1.4; color: #55505f;">{{ label }}</div>
+                <div style="font-size: 22px; line-height: 1.3; font-weight: 700; color: {{ value_color }};">{{ value }}</div>
+                <div style="font-size: 12px; line-height: 1.4; color: {{ change_color }};">{{ change }}</div>
+            </td>
         </tr>
+    </table>
+{% endmacro %}
+
+{% block header_label %}Weekly overview{% endblock %}
+
+{% block preheader %}
+    {%- if not overview.hasReports -%}
+        No DMARC reports arrived this week.
+    {%- elseif attention is not empty -%}
+        {%- set first = attention|first -%}
+        {%- if not first.isEnforced and first.traffic.failedDelivered > 0 -%}
+            {{ first.domain }}: {{ weekly.count(first.traffic.failedDelivered, 'message', 'messages') }} failed DMARC and {{ first.traffic.failedDelivered == 1 ? 'was' : 'were' }} still delivered.
+        {%- else -%}
+            {{ first.domain }}: a sending service is not aligned with the domain.
+        {%- endif -%}
+    {%- else -%}
+        {{ weekly.percent(traffic.passRate) }} of {{ weekly.count(traffic.messages, 'message', 'messages') }} passed DMARC.
+        {%- if traffic.failedDelivered == 0 %} Nothing that failed was delivered.{% endif -%}
+    {%- endif -%}
+{% endblock %}
+
+{% block content %}
+    <p style="margin: 0 0 4px 0; font-size: 13px; color: {{ muted }};"><span style="white-space: nowrap;">{{ overview.periodLabel(true) }}</span> (UTC)</p>
+    {% if not overview.hasReports %}
+        {{ ui.title('No reports this week') }}
+    {% elseif attention|length == 1 %}
+        {{ ui.title((attention|first).domain ~ ' needs attention') }}
+    {% elseif attention|length > 1 %}
+        {{ ui.title(attention|length ~ ' domains need attention') }}
+    {% else %}
+        {{ ui.title('No issues this week') }}
+    {% endif %}
+
+    {# Verdict #}
+    {% if not overview.hasReports %}
+        {% set box_background, box_border = '#f4f3f6', '#cfcdd4' %}
+    {% elseif attention is not empty %}
+        {% set box_background, box_border = '#fff7ed', '#f59e0b' %}
+    {% else %}
+        {% set box_background, box_border = '#f0fdf4', '#22c55e' %}
+    {% endif %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 24px 0;">
         <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Messages</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.messageCount }}</td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.messageTrend|number_format(2) }}%</td>
-        </tr>
-        <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Pass rate</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ (dashboard.passRate * 100)|number_format(2) }}%</td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.passTrend|number_format(2) }}%</td>
-        </tr>
-        <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Threats blocked</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.threatsBlockedCount }}</td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.threatsBlockedTrend|number_format(2) }}%</td>
-        </tr>
-        <tr>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>New domains</strong></td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ dashboard.newDomainCount }}</td>
-            <td style="padding: 8px; border: 1px solid #e5e7eb;">Trend: {{ dashboard.newDomainTrend|number_format(2) }}%</td>
+            <td bgcolor="{{ box_background }}" style="background-color: {{ box_background }}; border-left: 4px solid {{ box_border }}; border-radius: 4px; padding: 14px 16px; font-size: 15px; line-height: 1.5;">
+                {% if not overview.hasReports %}
+                    No DMARC aggregate reports arrived for your domains this week. If you expected some, check that each domain's DMARC record sends them here:<br>
+                    <code style="font-family: Menlo, Consolas, monospace; font-size: 13px; word-break: break-all;">rua=mailto:{{ overview.reportAddress }}</code>
+                {% elseif attention is not empty %}
+                    {% for domain in attention|slice(0, 2) %}
+                        {% set services = overview.findings|filter(f => f.type.value == 'unaligned_service' and f.domain.domain == domain.domain) %}
+                        <p style="margin: 0{% if not loop.last %} 0 8px 0{% endif %};">
+                            <strong>{{ domain.domain }}:</strong>
+                            {% if not domain.isEnforced and domain.traffic.failedDelivered > 0 %}
+                                {{ weekly.count(domain.traffic.failedDelivered, 'message', 'messages') }} failed DMARC and {{ domain.traffic.failedDelivered == 1 ? 'was' : 'were' }} still delivered{{ weekly.why_delivered(domain) }}.
+                                {%- if services|filter(f => f.delivered > 0) is not empty %} Some of them came from a sending service that is not aligned.{% endif %}
+                            {% else %}
+                                {% set service_messages = services|reduce((sum, f) => sum + f.messages, 0) %}
+                                {% set service_delivered = services|reduce((sum, f) => sum + f.delivered, 0) %}
+                                {{ weekly.count(service_messages, 'message', 'messages') }} from a sending service that is not aligned failed DMARC
+                                {%- if service_delivered == 0 %} and {{ service_messages == 1 ? 'was' : 'were' }} {{ weekly.blocked_verb(services|reduce((sum, f) => sum + f.quarantined, 0), services|reduce((sum, f) => sum + f.rejected, 0)) }}{% endif %}.
+                            {% endif %}
+                        </p>
+                    {% endfor %}
+                    {% if attention|length > 2 %}
+                        <p style="margin: 8px 0 0 0;">And {{ attention|length - 2 }} more {{ attention|length - 2 == 1 ? 'domain' : 'domains' }} below.</p>
+                    {% endif %}
+                {% elseif traffic.failedDelivered == 0 %}
+                    {{ weekly.percent(traffic.passRate) }} of {{ weekly.count(traffic.messages, 'message', 'messages') }} passed DMARC, and nothing that failed it was delivered.
+                {% else %}
+                    {{ weekly.percent(traffic.passRate) }} of {{ weekly.count(traffic.messages, 'message', 'messages') }} passed DMARC, and your policies are enforced. Receivers still delivered {{ traffic.failedDelivered|number_format }} that failed, at their own discretion, which they may do for forwarded mail.
+                {% endif %}
+            </td>
         </tr>
     </table>
 
-    <p style="margin: 0 0 8px 0;"><strong>Compliance</strong></p>
-    <p style="margin: 0 0 16px 0;">
-        DMARC: {{ dashboard.compliance.dmarc|number_format(2)*100 }}% ({{ dashboard.complianceTrend.dmarc|number_format(2) }}%)<br>
-        DKIM: {{ dashboard.compliance.dkim|number_format(2)*100 }}% ({{ dashboard.complianceTrend.dkim|number_format(2) }}%)<br>
-        SPF: {{ dashboard.compliance.spf|number_format(2)*100 }}% ({{ dashboard.complianceTrend.spf|number_format(2) }}%)
-    </p>
+    {% if overview.hasReports %}
+        {# Four numbers, two by two #}
+        {% set no_previous = previous.messages == 0 %}
+        {% set delivers_failures = attention|filter(d => not d.isEnforced and d.traffic.failedDelivered > 0) is not empty %}
 
-    <p style="margin: 0 0 8px 0;"><strong>Daily message volume</strong></p>
-    <p style="margin: 0 0 16px 0;">
-        {% for day, count in dashboard.messageCountByDate %}
-            {{ day }}: {{ count }}<br>
-        {% endfor %}
-    </p>
+        {% set change = overview.messagesChangePercent %}
+        {% if change is null %}
+            {% set messages_change = 'no reports the week before' %}
+        {% elseif change|round == 0 %}
+            {% set messages_change = 'same as the week before' %}
+        {% else %}
+            {% set messages_change = (change > 0 ? '+' : '−') ~ change|abs|round|number_format ~ '% vs. previous week' %}
+        {% endif %}
 
-    <p style="margin: 0 0 8px 0;"><strong>Daily blocked threats</strong></p>
-    <p style="margin: 0 0 16px 0;">
-        {% for day, count in dashboard.threatCountByDate %}
-            {{ day }}: {{ count }}<br>
-        {% endfor %}
-    </p>
+        {% set points = overview.passRateChangePoints %}
+        {% if points is null %}
+            {% set pass_change, pass_color = 'no reports the week before', muted %}
+        {% elseif points|abs < 0.05 %}
+            {% set pass_change, pass_color = 'same as the week before', muted %}
+        {% else %}
+            {% set pass_change = (points > 0 ? '▲ ' : '▼ ') ~ points|abs|number_format(1) ~ ' points' %}
+            {% set pass_color = points > 0 ? green : amber %}
+        {% endif %}
 
-    <p style="margin: 0 0 8px 0;"><strong>New domains</strong></p>
-    {% if dashboard.newDomains is empty %}
-        <p style="margin: 0 0 16px 0;">No new domains this week.</p>
-    {% else %}
-        <p style="margin: 0 0 16px 0;">
-            {% for domain in dashboard.newDomains %}
-                {{ domain }}<br>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px 0;">
+            <tr>
+                <td width="50%" valign="top" style="padding: 0 6px 12px 0;">
+                    {{ weekly.kpi('Messages', traffic.messages|number_format, messages_change, '#1a1720', muted) }}
+                </td>
+                <td width="50%" valign="top" style="padding: 0 0 12px 6px;">
+                    {{ weekly.kpi('Passed DMARC', weekly.percent(traffic.passRate), pass_change, '#1a1720', pass_color) }}
+                </td>
+            </tr>
+            <tr>
+                <td width="50%" valign="top" style="padding: 0 6px 0 0;">
+                    {{ weekly.kpi('Failed, still delivered', traffic.failedDelivered|number_format, no_previous ? 'no reports the week before' : previous.failedDelivered|number_format ~ ' the week before', delivers_failures ? amber : '#1a1720', muted) }}
+                </td>
+                <td width="50%" valign="top" style="padding: 0 0 0 6px;">
+                    {{ weekly.kpi('Rejected or quarantined', traffic.blocked|number_format, no_previous ? 'no reports the week before' : previous.blocked|number_format ~ ' the week before', '#1a1720', muted) }}
+                </td>
+            </tr>
+        </table>
+    {% endif %}
+
+    {# What to look at #}
+    {% if overview.findings is not empty %}
+        <h2 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 700;">What to look at</h2>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px 0; font-size: 14px; line-height: 1.5;">
+            {% for finding in overview.findings|slice(0, findings_shown) %}
+                {% set domain = finding.domain %}
+                {% set bottom = loop.last ? '0' : '14px' %}
+                {% set informational = finding.type.value in ['new_domain', 'quiet_domain'] %}
+                <tr>
+                    <td valign="top" width="22" style="padding: 0 0 {{ bottom }} 0; font-weight: 700; color: {{ informational ? muted : amber }};">{{ loop.index }}</td>
+                    <td style="padding: 0 0 {{ bottom }} 0;">
+                        {% if finding.type.value == 'unaligned_service' %}
+                            {% set blocked = finding.quarantined + finding.rejected %}
+                            <strong>Mail signed by {{ finding.signingDomain }} is not aligned with {{ domain.domain }}.</strong>
+                            {{ weekly.count(finding.messages, 'message', 'messages') }} from {{ weekly.sources(finding, true) }} carried a valid DKIM signature for {{ finding.signingDomain }}, not for {{ domain.domain }}.
+                            {% if finding.delivered == finding.messages %}
+                                {{ finding.messages == 1 ? 'It was' : 'They were' }} still delivered{{ weekly.why_delivered(domain) }}.
+                            {% elseif finding.delivered == 0 %}
+                                Receivers {{ weekly.blocked_verb(finding.quarantined, finding.rejected) }} {{ finding.messages == 1 ? 'it' : 'them' }}.
+                            {% else %}
+                                {{ finding.delivered|number_format }} {{ finding.delivered == 1 ? 'was' : 'were' }} delivered and {{ blocked|number_format }} {{ blocked == 1 ? 'was' : 'were' }} {{ weekly.blocked_verb(finding.quarantined, finding.rejected) }}.
+                            {% endif %}
+                            If you use this service, set up DKIM signing for {{ domain.domain }} in its settings{% if finding.delivered > 0 and not domain.isEnforced %} before you tighten the policy{% endif %}.
+                        {% elseif finding.type.value == 'delivered_failures' %}
+                            <strong>Failing mail was still delivered as {{ domain.domain }}.</strong>
+                            {{ weekly.count(finding.delivered, 'message', 'messages') }} that failed DMARC reached receivers{{ weekly.why_delivered(domain) }}.
+                            {{ finding.delivered == 1 ? 'It' : 'They' }} came from {{ weekly.sources(finding, false) }}.
+                            {{ weekly.next_step(domain) }}
+                        {% elseif finding.type.value == 'new_domain' %}
+                            <strong>{{ domain.domain }} started reporting.</strong>
+                            Its first reports arrived this week: {{ weekly.count(domain.traffic.messages, 'message', 'messages') }}, {{ weekly.percent(domain.traffic.passRate) }} passed DMARC{% if domain.policy %}, policy p={{ domain.policy }}{% endif %}.
+                        {% else %}
+                            <strong>{{ domain.domain }} sent no reports.</strong>
+                            The week before, reports covered {{ weekly.count(finding.messages, 'message', 'messages') }} from it. If it still sends mail, check that its DMARC record sends reports to <span style="word-break: break-all;">{{ overview.reportAddress }}</span>.
+                        {% endif %}
+                    </td>
+                </tr>
             {% endfor %}
+        </table>
+        {% if overview.findings|length > findings_shown %}
+            <p style="margin: -16px 0 28px 22px; font-size: 13px; color: {{ muted }};">{{ overview.findings|length - findings_shown }} more in the dashboard.</p>
+        {% endif %}
+    {% endif %}
+
+    {% if overview.hasReports %}
+        {# Domains #}
+        <h2 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700;">Your domains</h2>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px 0; font-size: 14px; border-collapse: collapse;">
+            <tr>
+                <th align="left" style="padding: 8px 0; border-bottom: 1px solid #e3e1e8; font-size: 12px; font-weight: 600; color: {{ muted }};">Domain</th>
+                <th align="right" style="padding: 8px 0 8px 12px; border-bottom: 1px solid #e3e1e8; font-size: 12px; font-weight: 600; color: {{ muted }};">Messages</th>
+                <th align="right" style="padding: 8px 0 8px 12px; border-bottom: 1px solid #e3e1e8; font-size: 12px; font-weight: 600; color: {{ muted }};">Passed</th>
+            </tr>
+            {% for domain in overview.domains|slice(0, domains_shown) %}
+                {% set line = loop.last ? '' : ' border-bottom: 1px solid #efeef2;' %}
+                {% set policy_label = domain.policy ? 'p=' ~ domain.policy ~ (domain.coversPartOfMail ? ', pct=' ~ domain.policyPercent : '') ~ (domain.subdomainPolicy and domain.subdomainPolicy != domain.policy ? ', sp=' ~ domain.subdomainPolicy : '') : 'policy unknown' %}
+                <tr>
+                    <td style="padding: 10px 0;{{ line }} word-break: break-word;">
+                        <span style="color: {{ domain.needsAttention ? '#f59e0b' : '#22c55e' }};">&#9679;</span>
+                        {% if domain.domainId %}<a href="{{ frontend_url }}/domains/{{ domain.domainId }}" style="color: #1a1720; text-decoration: none;">{{ domain.domain }}</a>{% else %}{{ domain.domain }}{% endif %}
+                        {% if domain.isNew %}<span style="font-size: 11px; color: {{ muted }}; border: 1px solid #e3e1e8; border-radius: 3px; padding: 0 4px; white-space: nowrap;">new</span>{% endif %}
+                        <div style="padding-left: 15px; font-size: 12px; color: {{ muted }};">{{ policy_label }}</div>
+                    </td>
+                    <td align="right" valign="top" style="padding: 10px 0 10px 12px;{{ line }} white-space: nowrap;">{{ domain.traffic.messages|number_format }}</td>
+                    <td align="right" valign="top" style="padding: 10px 0 10px 12px;{{ line }} white-space: nowrap;{% if domain.needsAttention %} color: {{ amber }}; font-weight: 600;{% endif %}">{{ weekly.percent(domain.traffic.passRate) }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+        {% if overview.domains|length > domains_shown %}
+            <p style="margin: -16px 0 28px 0; font-size: 13px; color: {{ muted }};">And {{ overview.domains|length - domains_shown }} more in the dashboard.</p>
+        {% endif %}
+    {% endif %}
+
+    {# Where to go next #}
+    {% set focus = attention|length == 1 ? attention|first : null %}
+    {% if focus and focus.domainId %}
+        {{ ui.button(frontend_url ~ '/domains/' ~ focus.domainId, 'Review ' ~ focus.domain) }}
+        <p style="margin: -8px 0 0 0; font-size: 13px; color: {{ muted }};">
+            or <a href="{{ frontend_url }}/dashboard" style="color: #c2540a;">open the dashboard</a> for every source and report.
         </p>
-    {% endif %}
-
-    <p style="margin: 0 0 8px 0;"><strong>Top offenders</strong></p>
-    {% if dashboard.topOffenders is empty %}
-        <p style="margin: 0 0 16px 0;">No offender activity this week.</p>
     {% else %}
-        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
-            <tr>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Source IP</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Abuse Email</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Tech Email</th>
-                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
-            </tr>
-            {% for offender in dashboard.topOffenders %}
-                <tr>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIp ?? 'Unknown' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgName ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgCountry ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgAbuseEmail ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.sourceIpInfo.orgTechEmail ?? 'N/A' }}</td>
-                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ offender.count ?? 0 }}</td>
-                </tr>
-            {% endfor %}
-        </table>
+        {{ ui.button(frontend_url ~ '/dashboard', 'Open the dashboard') }}
     {% endif %}
+{% endblock %}
 
-    <p style="margin: 0 0 8px 0;"><strong>Top senders</strong></p>
-    {% if dashboard.topSenders is empty %}
-        <p style="margin: 0 0 16px 0;">No sender activity this week.</p>
-    {% else %}
-        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
-            <tr>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Source IP</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Abuse Email</th>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Tech Email</th>
-                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
-            </tr>
-            {% for sender in dashboard.topSenders %}
-                <tr>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIp ?? 'Unknown' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgName ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgCountry ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgAbuseEmail ?? 'N/A' }}</td>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.sourceIpInfo.orgTechEmail ?? 'N/A' }}</td>
-                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ sender.count ?? 0 }}</td>
-                </tr>
-            {% endfor %}
-        </table>
-    {% endif %}
-
-    <p style="margin: 0 0 8px 0;"><strong>Source country distribution</strong></p>
-    {% if dashboard.sourceCountryDistribution is empty %}
-        <p style="margin: 0 0 16px 0;">No source country data this week.</p>
-    {% else %}
-        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
-            <tr>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Country</th>
-                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Count</th>
-            </tr>
-            {% for country in dashboard.sourceCountryDistribution %}
-                <tr>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ country.country ?? 'Unknown' }}</td>
-                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ country.count ?? 0 }}</td>
-                </tr>
-            {% endfor %}
-        </table>
-    {% endif %}
-
-    <p style="margin: 0 0 8px 0;"><strong>Top reporting organizations</strong></p>
-    {% if dashboard.topReportingOrganizations is empty %}
-        <p style="margin: 0 0 16px 0;">No reporting organization activity this week.</p>
-    {% else %}
-        <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px 0;">
-            <tr>
-                <th align="left" style="padding: 8px; border: 1px solid #e5e7eb;">Organization</th>
-                <th align="right" style="padding: 8px; border: 1px solid #e5e7eb;">Reports</th>
-            </tr>
-            {% for organization in dashboard.topReportingOrganizations %}
-                <tr>
-                    <td style="padding: 8px; border: 1px solid #e5e7eb;">{{ organization.reportingOrganization ?? 'Unknown' }}</td>
-                    <td align="right" style="padding: 8px; border: 1px solid #e5e7eb;">{{ organization.count ?? 0 }}</td>
-                </tr>
-            {% endfor %}
-        </table>
-    {% endif %}
-
-    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
-</div>
+{% block footer %}
+    {%- set organizations = overview.reportingOrganizations|slice(0, 5) -%}
+    {%- if overview.hasReports -%}
+        Based on {{ weekly.count(overview.reportCount, 'aggregate report', 'aggregate reports') }}
+        {%- if organizations is not empty %} from
+            {% if overview.reportingOrganizations|length > 5 %}{{ organizations|join(', ') }}, and others{% elseif organizations|length == 2 %}{{ organizations|join(' and ') }}{% else %}{{ organizations|join(', ', ', and ') }}{% endif %}
+        {%- endif %},
+        compared with <span style="white-space: nowrap;">{{ overview.previousPeriodLabel }}</span>.<br>
+    {%- endif %}
+    You get this every Tuesday because weekly overviews are on for {{ recipient }}.
+    <a href="{{ frontend_url }}/notifications" style="color: #6b6676;">Change notification settings</a>.
+{%- endblock %}

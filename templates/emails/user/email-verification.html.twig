@@ -1,24 +1,22 @@
-<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
+
+{% set verify_url = frontend_url ~ '/auth/email-verify?email=' ~ tokenEmail|url_encode ~ '&token=' ~ token|url_encode %}
+
+{% block preheader %}Confirm your address to finish setting up your DMARCo account.{% endblock %}
+
+{% block content %}
+    {{ ui.title('Verify your email address') }}
+
+    <p style="margin: 0 0 16px 0;">Hi{{ name ? ' ' ~ name : '' }},</p>
 
     <p style="margin: 0 0 16px 0;">
-        Thank you for creating an account with us. To complete your registration, please verify your email address.
+        Confirm that this is your address to finish setting up your DMARCo account.
     </p>
 
-    <p style="margin: 0 0 16px 0;">
-        <a
-            href="{{ frontend_url }}/auth/email-verify?email={{ tokenEmail }}&token={{ token }}"
-            style="display: inline-block; padding: 10px 14px; background: #c2540a; color: #ffffff; text-decoration: none; border-radius: 6px;"
-        >Verify Email Address</a>
-    </p>
+    {{ ui.button(verify_url, 'Verify email address') }}
 
-    <p style="margin: 0 0 16px 0;">
-        This verification link will remain valid for <strong>{{ tokenLifetimeHours }} hours</strong>.
-    </p>
+    {{ ui.note('The link works for ' ~ tokenLifetimeHours ~ ' hours. If you did not create an account, you can ignore this email.') }}
 
-    <p style="margin: 0 0 16px 0;">
-        If you did not create an account, you can safely ignore this email.
-    </p>
-
-    <p style="margin: 0;">Welcome aboard,<br>The DMARCo Team</p>
-</div>
+    {{ ui.link_fallback(verify_url) }}
+{% endblock %}

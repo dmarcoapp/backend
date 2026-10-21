@@ -1,0 +1,187 @@
+{% extends 'emails/base.txt.twig' %}
+{% import _self as weekly %}
+{#
+    Twig drops the newline after a tag, so every tag below sits on a line of
+    its own and conditional text inside a line is written as a ternary.
+#}
+{% set attention = overview.domainsNeedingAttention %}
+{% set traffic = overview.traffic %}
+{% set previous = overview.previousTraffic %}
+
+{% macro percent(rate) %}{{ rate is null ? '-' : (rate * 100)|number_format(1) ~ '%' }}{% endmacro %}
+
+{# "1 message", "2 messages" #}
+{% macro count(number, one, many) %}{{ number|number_format }} {{ number == 1 ? one : many }}{% endmacro %}
+
+{% macro source(source) %}
+    {%- set details = [source.orgName, source.orgCountry]|filter(v => v is not null) -%}
+    {{ source.ip }}{{ details is not empty ? ' (' ~ details|join(', ') ~ ')' : '' }}
+{%- endmacro %}
+
+{# Where the messages of a finding came from, as the end of "N messages from …". #}
+{% macro sources(finding, mid_sentence) %}
+    {%- import _self as weekly -%}
+    {{ finding.sourceCount == 1 ? weekly.source(finding.topSource) : finding.sourceCount ~ ' addresses, most of them from ' ~ weekly.source(finding.topSource) ~ (mid_sentence ? ',' : '') }}
+{%- endmacro %}
+
+{# What receivers did with blocked mail, from the dispositions they reported. #}
+{% macro blocked_verb(quarantined, rejected) %}
+    {%- if quarantined == 0 %}rejected{% elseif rejected == 0 %}quarantined{% else %}rejected or quarantined{% endif -%}
+{% endmacro %}
+
+{# Why mail that failed DMARC still reached receivers, as the end of a sentence. #}
+{% macro why_delivered(domain) %}
+    {%- if domain.policy == 'none' %}, because its policy is p=none
+    {%- elseif domain.coversPartOfMail %}, because its policy covers only {{ domain.policyPercent }}% of mail
+    {%- elseif domain.leavesSubdomainsOpen %}, possibly from subdomains, which its policy leaves open (sp=none)
+    {%- elseif domain.isEnforced %}, at the receivers' own discretion
+    {%- endif -%}
+{% endmacro %}
+
+{# What stops failing mail from being delivered, for a domain that lets it through. #}
+{% macro next_step(domain) %}
+    {%- if domain.policy == 'none' %} Once your own senders pass, a p=quarantine policy stops this.
+    {%- elseif domain.coversPartOfMail %} Once your own senders pass, applying the policy to all mail (pct=100) stops this.
+    {%- elseif domain.leavesSubdomainsOpen %} An sp=quarantine policy stops this for subdomains.
+    {%- endif -%}
+{% endmacro %}
+
+{% macro kpi(label, value, change) %}{{ '%-25s%-10s%s'|format(label, value, change) }}{% endmacro %}
+
+{% block content %}
+DMARCo weekly overview, {{ overview.periodLabel(true) }} (UTC)
+
+{% if not overview.hasReports %}
+NO REPORTS THIS WEEK
+
+No DMARC aggregate reports arrived for your domains this week. If you
+expected some, check that each domain's DMARC record sends them here:
+
+  rua=mailto:{{ overview.reportAddress }}
+{% else %}
+{% if attention|length == 1 %}
+{{ (attention|first).domain|upper }} NEEDS ATTENTION
+{% elseif attention|length > 1 %}
+{{ attention|length }} DOMAINS NEED ATTENTION
+{% else %}
+NO ISSUES THIS WEEK
+{% endif %}
+
+{% if attention is empty %}
+{% if traffic.failedDelivered == 0 %}
+{{ weekly.percent(traffic.passRate) }} of {{ weekly.count(traffic.messages, 'message', 'messages') }} passed DMARC, and nothing that failed it was delivered.
+{% else %}
+{{ weekly.percent(traffic.passRate) }} of {{ weekly.count(traffic.messages, 'message', 'messages') }} passed DMARC, and your policies are enforced. Receivers still delivered {{ traffic.failedDelivered|number_format }} that failed, at their own discretion, which they may do for forwarded mail.
+{% endif %}
+{% else %}
+{% for domain in attention|slice(0, 2) %}
+{% set services = overview.findings|filter(f => f.type.value == 'unaligned_service' and f.domain.domain == domain.domain) %}
+{% if not domain.isEnforced and domain.traffic.failedDelivered > 0 %}
+{{ domain.domain }}: {{ weekly.count(domain.traffic.failedDelivered, 'message', 'messages') }} failed DMARC and {{ domain.traffic.failedDelivered == 1 ? 'was' : 'were' }} still delivered{{ weekly.why_delivered(domain) }}.{{ services|filter(f => f.delivered > 0) is not empty ? ' Some of them came from a sending service that is not aligned.' : '' }}
+{% else %}
+{% set service_messages = services|reduce((sum, f) => sum + f.messages, 0) %}
+{% set service_delivered = services|reduce((sum, f) => sum + f.delivered, 0) %}
+{% set service_verb = weekly.blocked_verb(services|reduce((sum, f) => sum + f.quarantined, 0), services|reduce((sum, f) => sum + f.rejected, 0)) %}
+{{ domain.domain }}: {{ weekly.count(service_messages, 'message', 'messages') }} from a sending service that is not aligned failed DMARC{{ service_delivered == 0 ? ' and ' ~ (service_messages == 1 ? 'was ' : 'were ') ~ service_verb : '' }}.
+{% endif %}
+{% endfor %}
+{% if attention|length > 2 %}
+And {{ attention|length - 2 }} more {{ attention|length - 2 == 1 ? 'domain' : 'domains' }} below.
+{% endif %}
+{% endif %}
+
+{% set change = overview.messagesChangePercent %}
+{% set points = overview.passRateChangePoints %}
+{% set no_previous = previous.messages == 0 ? 'no reports the week before' : null %}
+{% if change is null %}
+{% set messages_change = 'no reports the week before' %}
+{% elseif change|round == 0 %}
+{% set messages_change = 'same as the week before' %}
+{% else %}
+{% set messages_change = (change > 0 ? '+' : '-') ~ change|abs|round|number_format ~ '% vs. previous week' %}
+{% endif %}
+{% if points is null %}
+{% set pass_change = 'no reports the week before' %}
+{% elseif points|abs < 0.05 %}
+{% set pass_change = 'same as the week before' %}
+{% else %}
+{% set pass_change = (points > 0 ? 'up ' : 'down ') ~ points|abs|number_format(1) ~ ' points' %}
+{% endif %}
+  {{ weekly.kpi('Messages', traffic.messages|number_format, messages_change) }}
+  {{ weekly.kpi('Passed DMARC', weekly.percent(traffic.passRate), pass_change) }}
+  {{ weekly.kpi('Failed, still delivered', traffic.failedDelivered|number_format, no_previous ?? (previous.failedDelivered|number_format ~ ' the week before')) }}
+  {{ weekly.kpi('Rejected or quarantined', traffic.blocked|number_format, no_previous ?? (previous.blocked|number_format ~ ' the week before')) }}
+{% endif %}
+{% if overview.findings is not empty %}
+
+WHAT TO LOOK AT
+
+{% for finding in overview.findings|slice(0, 3) %}
+{% set domain = finding.domain %}
+{% if finding.type.value == 'unaligned_service' %}
+{% set blocked = finding.quarantined + finding.rejected %}
+{% if finding.delivered == finding.messages %}
+{% set outcome = (finding.messages == 1 ? 'It was' : 'They were') ~ ' still delivered' ~ weekly.why_delivered(domain) ~ '.' %}
+{% elseif finding.delivered == 0 %}
+{% set outcome = 'Receivers ' ~ weekly.blocked_verb(finding.quarantined, finding.rejected) ~ (finding.messages == 1 ? ' it.' : ' them.') %}
+{% else %}
+{% set outcome = finding.delivered|number_format ~ (finding.delivered == 1 ? ' was' : ' were') ~ ' delivered and ' ~ blocked|number_format ~ (blocked == 1 ? ' was ' : ' were ') ~ weekly.blocked_verb(finding.quarantined, finding.rejected) ~ '.' %}
+{% endif %}
+{{ loop.index }}. Mail signed by {{ finding.signingDomain }} is not aligned with {{ domain.domain }}.
+   {{ weekly.count(finding.messages, 'message', 'messages') }} from {{ weekly.sources(finding, true) }} carried a valid DKIM signature for {{ finding.signingDomain }}, not for {{ domain.domain }}. {{ outcome }}
+   If you use this service, set up DKIM signing for {{ domain.domain }} in its settings{{ finding.delivered > 0 and not domain.isEnforced ? ' before you tighten the policy' : '' }}.
+{% elseif finding.type.value == 'delivered_failures' %}
+{{ loop.index }}. Failing mail was still delivered as {{ domain.domain }}.
+   {{ weekly.count(finding.delivered, 'message', 'messages') }} that failed DMARC reached receivers{{ weekly.why_delivered(domain) }}.
+   {{ finding.delivered == 1 ? 'It' : 'They' }} came from {{ weekly.sources(finding, false) }}.{{ weekly.next_step(domain) }}
+{% elseif finding.type.value == 'new_domain' %}
+{{ loop.index }}. {{ domain.domain }} started reporting.
+   Its first reports arrived this week: {{ weekly.count(domain.traffic.messages, 'message', 'messages') }}, {{ weekly.percent(domain.traffic.passRate) }} passed DMARC{{ domain.policy ? ', policy p=' ~ domain.policy : '' }}.
+{% else %}
+{{ loop.index }}. {{ domain.domain }} sent no reports.
+   The week before, reports covered {{ weekly.count(finding.messages, 'message', 'messages') }} from it. If it still sends mail, check that its DMARC record sends reports to {{ overview.reportAddress }}.
+{% endif %}
+
+{% endfor %}
+{% if overview.findings|length > 3 %}
+{{ overview.findings|length - 3 }} more in the dashboard.
+
+{% endif %}
+{% else %}
+
+{% endif %}
+{% if overview.hasReports %}
+YOUR DOMAINS
+
+{% for domain in overview.domains|slice(0, 10) %}
+  {{ domain.domain }}{{ domain.isNew ? ' (new)' : '' }}: {{ domain.policy ? 'p=' ~ domain.policy ~ (domain.coversPartOfMail ? ', pct=' ~ domain.policyPercent : '') ~ (domain.subdomainPolicy and domain.subdomainPolicy != domain.policy ? ', sp=' ~ domain.subdomainPolicy : '') : 'policy unknown' }}, {{ weekly.count(domain.traffic.messages, 'message', 'messages') }}, {{ weekly.percent(domain.traffic.passRate) }} passed{{ domain.needsAttention ? ', needs attention' : '' }}
+{% endfor %}
+{% if overview.domains|length > 10 %}
+  And {{ overview.domains|length - 10 }} more in the dashboard.
+{% endif %}
+
+{% endif %}
+{% set focus = attention|length == 1 ? attention|first : null %}
+{% if focus and focus.domainId %}
+Review {{ focus.domain }}: {{ frontend_url }}/domains/{{ focus.domainId }}
+{% endif %}
+Dashboard: {{ frontend_url }}/dashboard
+{% endblock %}
+
+{% block footer %}
+{% set organizations = overview.reportingOrganizations|slice(0, 5) %}
+{% if overview.reportingOrganizations|length > 5 %}
+{% set sources = ' from ' ~ organizations|join(', ') ~ ', and others' %}
+{% elseif organizations|length == 2 %}
+{% set sources = ' from ' ~ organizations|join(' and ') %}
+{% elseif organizations is not empty %}
+{% set sources = ' from ' ~ organizations|join(', ', ', and ') %}
+{% else %}
+{% set sources = '' %}
+{% endif %}
+{% if overview.hasReports %}
+Based on {{ weekly.count(overview.reportCount, 'aggregate report', 'aggregate reports') }}{{ sources }}, compared with {{ overview.previousPeriodLabel }}.
+{% endif %}
+You get this every Tuesday because weekly overviews are on for {{ recipient }}.
+Change notification settings: {{ frontend_url }}/notifications
+{% endblock %}

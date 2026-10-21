@@ -1,13 +1,20 @@
-<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-    <p style="margin: 0 0 16px 0;">Hey {{ name }}!</p>
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
+
+{% block preheader %}Sign-in codes now come from your authenticator app.{% endblock %}
+
+{% block content %}
+    {{ ui.title('Authenticator app turned on') }}
+
+    <p style="margin: 0 0 16px 0;">Hi{{ name ? ' ' ~ name : '' }},</p>
 
     <p style="margin: 0 0 16px 0;">
-        Two-factor authentication has been switched to the application method for your DMARCo account.
+        From now on, DMARCo asks for a code from your authenticator app when you sign in, instead of emailing you one.
     </p>
 
     <p style="margin: 0 0 16px 0;">
-        If you did not make this change, please contact support immediately.
+        If you did not make this change, reset your password and check the two-factor settings in your profile.
     </p>
 
-    <p style="margin: 0;">Thank you,<br>The DMARCo Team</p>
-</div>
+    {{ ui.button(frontend_url ~ '/profile', 'Open your profile') }}
+{% endblock %}

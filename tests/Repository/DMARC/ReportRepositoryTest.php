@@ -140,6 +140,126 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         self::assertSame(1, $deleted);
     }
 
+    public function testWeeklyQueriesCountMessagesByOutcome(): void
+    {
+        $user = $this->createVerifiedUser('weekly-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $repository = self::getContainer()->get(ReportRepository::class);
+        $utc = new \DateTimeZone('UTC');
+
+        // Reporters do not agree on how to spell a domain.
+        $older = $this->createReportForUser(
+            $user,
+            domain: 'Example.ORG',
+            begin: new \DateTimeImmutable('2024-03-04 00:00:00', $utc),
+            end: new \DateTimeImmutable('2024-03-04 23:59:59', $utc),
+            reportingOrganization: 'Example Reporter',
+            sumCount: 10,
+            createdAt: new \DateTimeImmutable('2024-03-05 06:00:00', $utc),
+        );
+        $older->setPPolicy(DispositionType::NONE);
+        $this->addRecordWithResults($older, '192.0.2.1', 10, DispositionType::NONE, DKIMAlign::PASS, SPFAlign::PASS, 'pass', 'example.org', SPFResult::PASS, 'example.org');
+
+        $latest = $this->createReportForUser(
+            $user,
+            domain: 'example.org',
+            begin: new \DateTimeImmutable('2024-03-05 00:00:00', $utc),
+            end: new \DateTimeImmutable('2024-03-05 23:59:59', $utc),
+            reportingOrganization: 'Example Reporter',
+            sumCount: 160,
+            createdAt: new \DateTimeImmutable('2024-03-06 06:00:00', $utc),
+        );
+        $latest->setPPolicy(DispositionType::QUARANTINE)->setPctPolicy(50);
+        $this->addRecordWithResults($latest, '192.0.2.1', 100, DispositionType::NONE, DKIMAlign::PASS, SPFAlign::FAIL, 'pass', 'example.org', SPFResult::PASS, 'bounce.example.org');
+        $this->addRecordWithResults($latest, '198.51.100.10', 40, DispositionType::NONE, DKIMAlign::FAIL, SPFAlign::FAIL, 'pass', 'mailer.example', SPFResult::PASS, 'mailer.example');
+        $this->addRecordWithResults($latest, '203.0.113.5', 20, DispositionType::QUARANTINE, DKIMAlign::FAIL, SPFAlign::FAIL, '', '', SPFResult::FAIL, 'example.org');
+
+        $other = $this->createReportForUser(
+            $user,
+            domain: 'example.com',
+            begin: new \DateTimeImmutable('2024-03-05 00:00:00', $utc),
+            end: new \DateTimeImmutable('2024-03-05 23:59:59', $utc),
+            reportingOrganization: 'Example Reporter',
+            sumCount: 5,
+            createdAt: new \DateTimeImmutable('2024-03-06 06:00:00', $utc),
+        );
+        $other->setPPolicy(DispositionType::REJECT)->setSpPolicy(DispositionType::NONE);
+        $this->addRecordWithResults($other, '203.0.113.6', 5, DispositionType::REJECT, DKIMAlign::FAIL, SPFAlign::FAIL, 'fail', 'example.com', SPFResult::FAIL, 'example.com');
+
+        // A later report whose policy could not be read leaves the known one.
+        $unreadable = $this->createReportForUser(
+            $user,
+            domain: 'example.com',
+            begin: new \DateTimeImmutable('2024-03-06 00:00:00', $utc),
+            end: new \DateTimeImmutable('2024-03-06 23:59:59', $utc),
+            reportingOrganization: 'Example Reporter',
+            sumCount: 0,
+            createdAt: new \DateTimeImmutable('2024-03-07 06:00:00', $utc),
+        );
+        $unreadable->setPPolicy(DispositionType::UNKNOWN);
+
+        $this->entityManager->flush();
+
+        $period = new \DatePeriod(
+            new \DateTimeImmutable('2024-03-04 00:00:00', $utc),
+            new \DateInterval('P1D'),
+            new \DateTimeImmutable('2024-03-11 00:00:00', $utc),
+        );
+
+        self::assertSame(
+            [
+                ['domain' => 'example.org', 'messages' => 170, 'passed' => 110, 'failedDelivered' => 40, 'blocked' => 20],
+                ['domain' => 'example.com', 'messages' => 5, 'passed' => 0, 'failedDelivered' => 0, 'blocked' => 5],
+            ],
+            $repository->getTrafficByDomain($period, $user),
+        );
+        self::assertEqualsWithDelta(110 / 175, $repository->getPassRate($period, $user), 0.0001);
+
+        $policies = $repository->getLatestPolicyByDomain($period, $user);
+        ksort($policies);
+        self::assertSame(
+            [
+                'example.com' => ['policy' => 'reject', 'percent' => null, 'subdomainPolicy' => 'none'],
+                'example.org' => ['policy' => 'quarantine', 'percent' => 50, 'subdomainPolicy' => null],
+            ],
+            $policies,
+        );
+
+        $failing = $repository->getFailingSources($period, $user);
+        self::assertCount(3, $failing);
+        self::assertSame(
+            [
+                'domain' => 'example.org',
+                'sourceIp' => '198.51.100.10',
+                'orgName' => 'Example Org',
+                'orgCountry' => 'HU',
+                'dkimAuth' => 'pass',
+                'dkimDomain' => 'mailer.example',
+                'spfAuth' => 'pass',
+                'spfDomain' => 'mailer.example',
+                'messages' => 40,
+                'delivered' => 40,
+                'quarantined' => 0,
+                'rejected' => 0,
+            ],
+            $failing[0],
+        );
+        self::assertSame(['203.0.113.5', '203.0.113.6'], [$failing[1]['sourceIp'], $failing[2]['sourceIp']]);
+        self::assertSame([0, 20, 0], [$failing[1]['delivered'], $failing[1]['quarantined'], $failing[1]['rejected']]);
+        self::assertSame([0, 0, 5], [$failing[2]['delivered'], $failing[2]['quarantined'], $failing[2]['rejected']]);
+
+        // The dashboard's gauges weigh messages the way its pass rate does.
+        self::assertEqualsWithDelta(
+            ['dmarc' => 110 / 175, 'dkim' => 110 / 175, 'spf' => 10 / 175],
+            $repository->getComplianceAverage($period, $user)[0],
+            0.0001,
+        );
+
+        $firstReports = $repository->getFirstReportDateByDomain($user);
+        ksort($firstReports);
+        self::assertSame(['example.com', 'example.org'], array_keys($firstReports));
+        self::assertSame('2024-03-04 00:00', $firstReports['example.org']->format('Y-m-d H:i'));
+    }
+
     private function createReportForUser(
         User $user,
         string $domain,
@@ -193,6 +313,9 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
             ;
         }
 
+        // Mail that was quarantined failed DMARC, so it is aligned on neither.
+        $passed = DispositionType::NONE === $disposition;
+
         $record = new ReportRecord();
         $record
             ->setReport($report)
@@ -200,11 +323,46 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
             ->setSourceIpInfo($sourceIpInfo)
             ->setCount(1)
             ->setDisposition($disposition)
-            ->setDkimAlign(DKIMAlign::PASS)
-            ->setSpfAlign(SPFAlign::PASS)
-            ->setDkimAuth('pass')
-            ->setSpfAuth(SPFResult::PASS)
+            ->setDkimAlign($passed ? DKIMAlign::PASS : DKIMAlign::FAIL)
+            ->setSpfAlign($passed ? SPFAlign::PASS : SPFAlign::FAIL)
+            ->setDkimAuth($passed ? 'pass' : 'fail')
+            ->setSpfAuth($passed ? SPFResult::PASS : SPFResult::FAIL)
             ->setSpfDomain('example.com')
+        ;
+
+        $report->addRecord($record);
+        $this->entityManager->persist($record);
+    }
+
+    private function addRecordWithResults(
+        Report $report,
+        string $sourceIp,
+        int $count,
+        DispositionType $disposition,
+        DKIMAlign $dkimAlign,
+        SPFAlign $spfAlign,
+        string $dkimAuth,
+        string $dkimDomain,
+        SPFResult $spfAuth,
+        string $spfDomain,
+    ): void {
+        $record = new ReportRecord();
+        $record
+            ->setReport($report)
+            ->setSourceIp($sourceIp)
+            ->setSourceIpInfo(
+                (new IpInfo())
+                    ->setOrgName('Example Org')
+                    ->setOrgCountry('HU')
+            )
+            ->setCount($count)
+            ->setDisposition($disposition)
+            ->setDkimAlign($dkimAlign)
+            ->setSpfAlign($spfAlign)
+            ->setDkimAuth($dkimAuth)
+            ->setDkimDomain($dkimDomain)
+            ->setSpfAuth($spfAuth)
+            ->setSpfDomain($spfDomain)
         ;
 
         $report->addRecord($record);

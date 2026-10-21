@@ -1,0 +1,72 @@
+{#
+    Shared frame of every DMARCo email: the logo header, a white card for the
+    message and a footer naming the instance it came from. Tables and inline
+    styles only, because that is what email clients reliably render.
+
+    Blocks a template can fill:
+        preheader     the line clients show next to the subject (optional)
+        header_label  small text on the right of the logo (optional)
+        content       the message itself
+        footer        lines above the standard footer line (optional)
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>{{ email.subject }}</title>
+    <style>
+        /* Narrow screens get thinner margins. Clients that ignore this keep the inline padding. */
+        @media only screen and (max-width: 480px) {
+            .dmarco-frame { padding: 16px 8px !important; }
+            .dmarco-card { padding: 22px 16px !important; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f3f6;">
+{% if block('preheader') is defined %}
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">{{ block('preheader')|trim }}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+{% endif %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f3f6" style="background-color: #f4f3f6;">
+    <tr>
+        <td class="dmarco-frame" align="center" style="padding: 24px 12px;">
+            {# Outlook for Windows ignores max-width, so it gets a fixed one. #}
+            <!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1720;">
+                <tr>
+                    <td style="padding: 0 4px 16px 4px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                                <td width="32" valign="middle" style="width: 32px;">
+                                    <img src="{{ email.image('emails/images/logo.png', 'image/png') }}" width="32" height="32" alt="" style="display: block; width: 32px; height: 32px; border: 0;">
+                                </td>
+                                <td valign="middle" style="padding-left: 10px; font-size: 17px; font-weight: 700; color: #1a1720;">DMARCo</td>
+                                {% if block('header_label') is defined %}
+                                    <td align="right" valign="middle" style="font-size: 13px; color: #55505f;">{{ block('header_label')|trim }}</td>
+                                {% endif %}
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="dmarco-card" bgcolor="#ffffff" style="background-color: #ffffff; border: 1px solid #e3e1e8; border-radius: 8px; padding: 28px 24px; font-size: 15px; line-height: 1.6;">
+                        {% block content %}{% endblock %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 16px 4px 0 4px; font-size: 12px; line-height: 1.6; color: #6b6676;">
+                        {% if block('footer') is defined %}
+                            {{ block('footer') }}<br>
+                        {% endif %}
+                        Sent by DMARCo at <a href="{{ frontend_url }}" style="color: #6b6676;">{{ frontend_url|split('://')|last }}</a>.
+                    </td>
+                </tr>
+            </table>
+            <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>
