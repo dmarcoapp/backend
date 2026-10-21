@@ -65,9 +65,9 @@ That can be AWS S3, MinIO, or another compatible service.
 - DMARC aggregate XML validated against `config/dmarc/rua.xsd`
 - Async processing of reports, report records, domains, and source IP data
 - REST API under `/v1`, with OpenAPI documentation at `/v1/doc`
-- Registration, email verification, login, refresh tokens, password reset, and
-  logout
-- Two-factor authentication by email or authenticator app
+- One operator account, created from the command line, with login, refresh
+  tokens, and logout
+- Optional two-factor authentication with an authenticator app
 - Dashboard, notification settings, and sender blocklist APIs
 - Scheduled cleanup and periodic user and domain processing
 
@@ -75,7 +75,7 @@ That can be AWS S3, MinIO, or another compatible service.
 
 - Docker and Docker Compose v2
 - S3-compatible bucket for inbound report attachments
-- SMTP provider for application emails
+- Optional: an SMTP provider, for notification emails
 - Optional: an inbound mail gateway such as
   [dmarcoapp/mail-inbound](https://github.com/dmarcoapp/mail-inbound)
 
@@ -128,7 +128,6 @@ Important settings:
 | --- | --- |
 | `APP_SECRET` | Symfony application secret |
 | `APP_FRONTEND_URL` | Frontend URL used in emails and links |
-| `APP_REGISTRATION_ENABLED` | Enables or disables public registration |
 | `APP_EMAIL_SENDER_ADDRESS` | Sender address for application emails |
 | `APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN` | Domain used to build per-user DMARC aggregate report mailbox addresses |
 | `APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET` | HMAC secret for inbound report webhooks |
@@ -136,7 +135,7 @@ Important settings:
 | `APP_IP_LOOKUP_ENABLED` | Looks up who owns each sending IP address, at ipwho.is and the regional internet registries; `false` keeps every address on the server |
 | `CORS_ALLOW_ORIGIN` | Allowed browser origins for the API |
 | `DATABASE_URL` | PostgreSQL connection URL |
-| `MAILER_DSN` | Symfony Mailer DSN |
+| `MAILER_DSN` | Symfony Mailer DSN for notification emails; `null://null` sends none |
 | `MESSENGER_ASYNC_HIGH_TRANSPORT_DSN` | High-priority Messenger transport |
 | `MESSENGER_ASYNC_LOW_TRANSPORT_DSN` | Low-priority Messenger transport |
 | `REDIS_DSN` | Redis cache provider |
@@ -254,7 +253,8 @@ Before exposing the service:
 - Generate deployment-specific JWT keys.
 - Configure PostgreSQL, RabbitMQ, Redis, and S3 storage for durable production
   use.
-- Configure `MAILER_DSN` and `APP_EMAIL_SENDER_ADDRESS`.
+- Configure `MAILER_DSN` and `APP_EMAIL_SENDER_ADDRESS` if you want
+  notification emails.
 - Restrict `CORS_ALLOW_ORIGIN` to trusted frontend origins.
 - Confirm the inbound gateway validates DMARC emails and signs webhook requests.
 - Confirm workers are running with `docker compose ps`.
@@ -281,6 +281,7 @@ Common console commands:
 ```bash
 docker compose exec php bash -lc "bin/console app:user:create"
 docker compose exec php bash -lc "bin/console app:user:reset-password"
+docker compose exec php bash -lc "bin/console app:user:disable-two-factor"
 docker compose exec php bash -lc "bin/console app:email:process-bulk"
 docker compose exec php bash -lc "bin/console app:dmarc:report:process-bulk"
 docker compose exec php bash -lc "bin/console app:dmarc:domain:process-bulk"

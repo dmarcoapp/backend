@@ -23,7 +23,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 {
     public function testDashboardReturnsMetricsAndCaches(): void
     {
-        $user = $this->createVerifiedUser('dash@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('dash@example.com', 'Str0ngPassw0rd!@#');
 
         $domain = new Domain($user, 'example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
@@ -89,7 +89,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
     public function testDashboardRejectsInvalidPeriod(): void
     {
-        $this->createVerifiedUser('dash2@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash2@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('dash2@example.com', 'Str0ngPassw0rd!@#');
 
@@ -104,8 +104,8 @@ final class DashboardTest extends ApiIntegrationTestCase
 
     public function testDashboardMetricsAreUserSpecific(): void
     {
-        $userWithData = $this->createVerifiedUser('dash3@example.com', 'Str0ngPassw0rd!@#');
-        $this->createVerifiedUser('dash4@example.com', 'Str0ngPassw0rd!@#');
+        $userWithData = $this->createAccount('dash3@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash4@example.com', 'Str0ngPassw0rd!@#');
 
         $domain = new Domain($userWithData, 'example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
@@ -171,7 +171,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
     public function testDashboardThreatCountByDateCountsQuarantineAndReject(): void
     {
-        $user = $this->createVerifiedUser('dash5@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('dash5@example.com', 'Str0ngPassw0rd!@#');
 
         $domain = new Domain($user, 'example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
@@ -232,7 +232,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
     public function testDashboardTopMetricsContainExpectedValues(): void
     {
-        $user = $this->createVerifiedUser('dash6@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('dash6@example.com', 'Str0ngPassw0rd!@#');
 
         $domain = new Domain($user, 'example.com');
         $domain->setLastChecked(new \DateTimeImmutable());

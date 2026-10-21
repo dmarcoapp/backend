@@ -6,6 +6,7 @@ namespace App\Tests\Api;
 
 use App\Repository\User\UserRepository;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * @internal
@@ -14,188 +15,50 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  */
 final class AuthEndpointsTest extends ApiTestCase
 {
-    public function testRequestPasswordResetReturnsSuccess(): void
+    public function testStatusReportsAFreshInstall(): void
     {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_password_reset',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
+        $response = $this->requestStatus(hasAccount: false);
 
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockAcceptedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockAcceptedLimiterFactory());
-            },
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame(
+            ['accountExists' => false],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
         );
-
-        self::assertSame(200, $response->getStatusCode());
-        self::assertStringContainsString('Password reset request sent.', (string) $response->getContent());
     }
 
-    public function testRequestPasswordResetReturnsValidationError(): void
+    public function testStatusReportsAnExistingAccount(): void
     {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_password_reset',
-            payload: [],
-        );
+        $response = $this->requestStatus(hasAccount: true);
 
-        self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame(
+            ['accountExists' => true],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
     }
 
-    public function testRequestPasswordResetReturnsTooManyRequestsWhenApiLimited(): void
+    public function testStatusReturnsTooManyRequestsWhenApiLimited(): void
     {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_password_reset',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockRejectedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockAcceptedLimiterFactory());
-            },
-        );
+        $response = $this->requestStatus(hasAccount: true, limited: true);
 
         self::assertSame(429, $response->getStatusCode());
     }
 
-    public function testRequestPasswordResetReturnsTooManyRequestsWhenSendmailLimited(): void
+    private function requestStatus(bool $hasAccount, bool $limited = false): Response
     {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_password_reset',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
+        return $this->requestJson(
+            method: 'GET',
+            uri: '/v1/auth/status',
+            configureContainer: function (ContainerInterface $container) use ($hasAccount, $limited): void {
                 $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
+                $userRepository->method('hasAny')->willReturn($hasAccount);
 
                 $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockAcceptedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockRejectedLimiterFactory());
+                $container->set(
+                    'limiter.anonymous_api',
+                    $limited ? $this->mockRejectedLimiterFactory() : $this->mockAcceptedLimiterFactory(),
+                );
             },
         );
-
-        self::assertSame(429, $response->getStatusCode());
-    }
-
-    public function testRequestVerificationResendReturnsSuccess(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_verification_resend',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockAcceptedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockAcceptedLimiterFactory());
-            },
-        );
-
-        self::assertSame(200, $response->getStatusCode());
-        self::assertStringContainsString('Email verification email resent.', (string) $response->getContent());
-    }
-
-    public function testRequestVerificationResendReturnsValidationError(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_verification_resend',
-            payload: [],
-        );
-
-        self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
-    }
-
-    public function testRequestVerificationResendReturnsTooManyRequestsWhenApiLimited(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_verification_resend',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockRejectedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockAcceptedLimiterFactory());
-            },
-        );
-
-        self::assertSame(429, $response->getStatusCode());
-    }
-
-    public function testRequestVerificationResendReturnsTooManyRequestsWhenSendmailLimited(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/request_verification_resend',
-            payload: ['email' => 'user@example.com'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockAcceptedLimiterFactory());
-                $container->set('limiter.anonymous_sendmail', $this->mockRejectedLimiterFactory());
-            },
-        );
-
-        self::assertSame(429, $response->getStatusCode());
-    }
-
-    public function testVerifyReturnsNotFoundForInvalidToken(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/verify',
-            payload: ['email' => 'user@example.com', 'token' => 'invalid'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockAcceptedLimiterFactory());
-            },
-        );
-
-        self::assertSame(404, $response->getStatusCode());
-    }
-
-    public function testVerifyReturnsValidationError(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/verify',
-            payload: ['email' => 'user@example.com'],
-        );
-
-        self::assertSame(422, $response->getStatusCode(), (string) $response->getContent());
-    }
-
-    public function testVerifyReturnsTooManyRequestsWhenApiLimited(): void
-    {
-        $response = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/verify',
-            payload: ['email' => 'user@example.com', 'token' => 'invalid'],
-            configureContainer: function (ContainerInterface $container): void {
-                $userRepository = $this->createStub(UserRepository::class);
-                $userRepository->method('findOneBy')->willReturn(null);
-
-                $container->set(UserRepository::class, $userRepository);
-                $container->set('limiter.anonymous_api', $this->mockRejectedLimiterFactory());
-            },
-        );
-
-        self::assertSame(429, $response->getStatusCode());
     }
 }

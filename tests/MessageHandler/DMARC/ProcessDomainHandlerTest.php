@@ -46,7 +46,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
     public function testInvokeUpdatesDomainWhenDmarcRecordFound(): void
     {
         $token = 'shared-token-'.uniqid('', true);
-        $user = $this->createVerifiedUser('domain-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('domain-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $user->setSharedPostboxIdentifierToken($token);
         $this->entityManager->flush();
 
@@ -78,7 +78,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
 
     public function testInvokeKeepsDmarcFieldsWhenNoRecordFound(): void
     {
-        $user = $this->createVerifiedUser('domain-empty-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('domain-empty-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $user->setSharedPostboxIdentifierToken('shared-token-'.uniqid('', true));
         $this->entityManager->flush();
 

@@ -4,24 +4,23 @@ declare(strict_types=1);
 
 namespace App\Command\User;
 
-use App\Event\User\EmailVerificationResendEvent;
 use App\Repository\User\UserRepository;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
+// The way back in after losing the authenticator app. Signing in then needs only
+// the password, until two-factor authentication is set up again in the profile.
 #[AsCommand(
-    name: 'app:user:verification-email:resend',
-    description: 'Resend a user email verification',
+    name: 'app:user:disable-two-factor',
+    description: 'Turn off two-factor authentication for a user',
 )]
-final class ResendUserEmailVerificationCommand extends Command
+final class DisableTwoFactorCommand extends Command
 {
     public function __construct(
         private readonly UserRepository $userRepository,
-        private readonly EventDispatcherInterface $eventDispatcher,
     ) {
         parent::__construct();
     }
@@ -39,9 +38,13 @@ final class ResendUserEmailVerificationCommand extends Command
             return Command::FAILURE;
         }
 
-        $this->eventDispatcher->dispatch(new EmailVerificationResendEvent($user));
+        $user
+            ->setTwoFactorMethod(null)
+            ->setTwoFactorAppSecret(null)
+        ;
+        $this->userRepository->save($user);
 
-        $io->success('User verification email resent!');
+        $io->success('Two-factor authentication is off.');
 
         return Command::SUCCESS;
     }

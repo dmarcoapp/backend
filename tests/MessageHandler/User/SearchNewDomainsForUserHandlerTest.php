@@ -25,7 +25,7 @@ final class SearchNewDomainsForUserHandlerTest extends ApiIntegrationTestCase
 {
     public function testInvokeDispatchesOnlyUncheckedDomains(): void
     {
-        $user = $this->createVerifiedUser('search-domains-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('search-domains-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $unchecked = new Domain($user, 'unchecked.example');
         $checked = (new Domain($user, 'checked.example'))

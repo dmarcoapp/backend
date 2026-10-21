@@ -16,8 +16,8 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 {
     public function testBlocklistCrudAndOwnership(): void
     {
-        $owner = $this->createVerifiedUser('owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('other@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('other@example.com', 'Str0ngPassw0rd!@#');
 
         $ownerToken = $this->login('owner@example.com', 'Str0ngPassw0rd!@#');
         $otherToken = $this->login('other@example.com', 'Str0ngPassw0rd!@#');
@@ -89,7 +89,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistCreateAllowsMultipleEntries(): void
     {
-        $user = $this->createVerifiedUser('limited@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('limited@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('limited@example.com', 'Str0ngPassw0rd!@#');
 
         $firstResponse = $this->requestJson(
@@ -113,7 +113,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistCreateRejectsCommaSeparatedPatterns(): void
     {
-        $this->createVerifiedUser('invalid-pattern@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('invalid-pattern@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('invalid-pattern@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
@@ -128,7 +128,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistCreateRejectsInvalidDomainCharacters(): void
     {
-        $this->createVerifiedUser('invalid-domain-pattern@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('invalid-domain-pattern@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('invalid-domain-pattern@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
@@ -143,7 +143,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistCreateRejectsUniversalPattern(): void
     {
-        $this->createVerifiedUser('universal-pattern@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('universal-pattern@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('universal-pattern@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
@@ -158,7 +158,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistCreateRejectsUniversalPatternWithMultipleDomainLabels(): void
     {
-        $this->createVerifiedUser('universal-pattern-multi@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('universal-pattern-multi@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('universal-pattern-multi@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
@@ -173,8 +173,8 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistBulkDeleteRemovesOwnedEntriesByIds(): void
     {
-        $owner = $this->createVerifiedUser('blocklist-bulk-owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('blocklist-bulk-other@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('blocklist-bulk-owner@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('blocklist-bulk-other@example.com', 'Str0ngPassw0rd!@#');
 
         $ownerEntry1 = new BlocklistEntry($owner, '*@owned-1.example');
         $ownerEntry2 = new BlocklistEntry($owner, '*@owned-2.example');
@@ -210,8 +210,8 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
     public function testBlocklistBulkDeleteRejectsWhenAnyEntryIsNotOwnedByAuthenticatedUser(): void
     {
-        $owner = $this->createVerifiedUser('blocklist-bulk-owner-2@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('blocklist-bulk-other-2@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('blocklist-bulk-owner-2@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('blocklist-bulk-other-2@example.com', 'Str0ngPassw0rd!@#');
 
         $ownerEntry = new BlocklistEntry($owner, '*@owned.example');
         $otherEntry = new BlocklistEntry($other, '*@other.example');

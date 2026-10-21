@@ -99,7 +99,7 @@ final class TwoFactorController extends AbstractController
     ): JsonResponse {
         $user = $this->getManagedUser($user);
         $user
-            ->setTwoFactorMethod(TwoFactorMethod::EMAIL)
+            ->setTwoFactorMethod(null)
             ->setTwoFactorAppSecret(null)
         ;
 

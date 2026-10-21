@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(TwoFactorSecretManager::class)]
 final class TwoFactorSecretManagerTest extends TestCase
 {
-    public function testEnsureEmailSecretReturnsExistingWithoutFlush(): void
+    public function testEnsureAppSecretReturnsExistingWithoutFlush(): void
     {
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->expects(self::never())->method('flush');
@@ -26,27 +26,11 @@ final class TwoFactorSecretManagerTest extends TestCase
         $manager = new TwoFactorSecretManager($entityManager, $generator);
 
         $user = new User();
-        $user->setTwoFactorEmailSecret('EXISTINGSECRET');
+        $user->setTwoFactorAppSecret('EXISTINGSECRET');
 
-        $secret = $manager->ensureEmailSecret($user);
+        $secret = $manager->ensureAppSecret($user);
 
         self::assertSame('EXISTINGSECRET', $secret);
-    }
-
-    public function testEnsureEmailSecretGeneratesAndFlushes(): void
-    {
-        $entityManager = $this->createMock(EntityManagerInterface::class);
-        $entityManager->expects(self::once())->method('flush');
-
-        $generator = new TwoFactorSecretGenerator();
-        $manager = new TwoFactorSecretManager($entityManager, $generator);
-
-        $user = new User();
-
-        $secret = $manager->ensureEmailSecret($user);
-
-        self::assertNotSame('', $secret);
-        self::assertSame($secret, $user->getTwoFactorEmailSecret());
     }
 
     public function testEnsureAppSecretGeneratesAndFlushes(): void

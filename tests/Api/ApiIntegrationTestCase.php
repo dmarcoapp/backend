@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Api;
 
 use App\Entity\User\User;
-use App\Enum\User\TwoFactorMethod;
-use App\Service\User\TwoFactor\TwoFactorSecretGenerator;
 use App\Service\User\TwoFactor\TwoFactorService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
@@ -47,7 +45,7 @@ abstract class ApiIntegrationTestCase extends ApiTestCase
         $this->entityManager = self::getContainer()->get('doctrine')->getManager();
     }
 
-    protected function createVerifiedUser(string $email, string $password, string $name = 'Test User'): User
+    protected function createAccount(string $email, string $password, string $name = 'Test User'): User
     {
         $user = new User();
         $user
@@ -55,10 +53,6 @@ abstract class ApiIntegrationTestCase extends ApiTestCase
             ->setName($name)
             ->setRoles(['ROLE_USER'])
             ->setSharedPostboxIdentifierToken(ByteString::fromRandom(32, 'abcdefghijklmnopqrstuvwxyz0123456789')->toString())
-            ->setEmailVerificationToken(null)
-            ->setEmailVerificationTokenExpiresAt(null)
-            ->setTwoFactorMethod(TwoFactorMethod::EMAIL)
-            ->setTwoFactorEmailSecret(self::getContainer()->get(TwoFactorSecretGenerator::class)->generate())
         ;
 
         $passwordHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
@@ -97,18 +91,18 @@ abstract class ApiIntegrationTestCase extends ApiTestCase
             ],
         );
 
-        self::assertSame(401, $initialResponse->getStatusCode(), (string) $initialResponse->getContent());
         $initialPayload = json_decode((string) $initialResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame(401, $initialPayload['code'] ?? null);
+        if (200 === $initialResponse->getStatusCode()) {
+            return $initialPayload;
+        }
+
+        self::assertSame(401, $initialResponse->getStatusCode(), (string) $initialResponse->getContent());
         self::assertSame('two_factor_required', $initialPayload['error'] ?? null);
 
         $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
         self::assertNotNull($user);
 
-        $twoFactorService = self::getContainer()->get(TwoFactorService::class);
-        $code = TwoFactorMethod::APP === $twoFactorService->getMethod($user)
-            ? $twoFactorService->getAppCode($user)
-            : $twoFactorService->getEmailCode($user);
+        $code = self::getContainer()->get(TwoFactorService::class)->getAppCode($user);
 
         $response = $this->requestJson(
             method: 'POST',

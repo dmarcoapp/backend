@@ -29,12 +29,8 @@ final class EmailTemplatesTest extends ApiTestCase
      */
     public static function emails(): iterable
     {
-        $tokenLink = 'email=first%2Blast%40example.test&token=a%2Fb%2Bc';
 
-        yield 'email verification' => ['user/email-verification', ['name' => 'Alex', 'tokenEmail' => 'first+last@example.test', 'token' => 'a/b+c', 'tokenLifetimeHours' => 24], ['Hi Alex,', 'https://example.test/auth/email-verify?'.$tokenLink, '24 hours']];
-        yield 'password reset' => ['user/password-reset', ['name' => 'Alex', 'tokenEmail' => 'first+last@example.test', 'token' => 'a/b+c', 'tokenLifetimeHours' => 24], ['Hi Alex,', 'https://example.test/auth/password-reset?'.$tokenLink]];
-        yield 'password changed' => ['user/password-change', ['name' => 'Alex'], ['was just changed', 'https://example.test/auth/forgot-password']];
-        yield 'two-factor code' => ['user/two-factor-code', ['name' => 'Alex', 'code' => '482913'], ['482913']];
+        yield 'password changed' => ['user/password-change', ['name' => 'Alex'], ['was just changed', 'app:user:reset-password']];
         yield 'two-factor enabled' => ['user/two-factor-enabled', ['name' => 'Alex'], ['authenticator app', 'https://example.test/profile']];
         yield 'two-factor disabled' => ['user/two-factor-disabled', ['name' => 'Alex'], ['no longer uses an authenticator app']];
         yield 'login notification' => ['user/login-notification', ['name' => 'Alex', 'ip' => '203.0.113.10', 'userAgent' => 'TestAgent/1.0', 'occurredAt' => new \DateTimeImmutable('2026-10-21 08:30:00 UTC')], ['203.0.113.10', 'TestAgent/1.0', '2026-10-21 08:30 UTC', 'https://example.test/notifications']];

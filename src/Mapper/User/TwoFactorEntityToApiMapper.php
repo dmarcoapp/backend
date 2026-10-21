@@ -37,7 +37,7 @@ final readonly class TwoFactorEntityToApiMapper implements MapperInterface
 
         $method = $this->twoFactorService->getMethod($user);
 
-        $dto->twoFactorMethod = $method->value;
+        $dto->twoFactorMethod = $method?->value;
         $dto->twoFactorAppEnabled = TwoFactorMethod::APP === $method;
 
         if ($dto->twoFactorAppEnabled) {

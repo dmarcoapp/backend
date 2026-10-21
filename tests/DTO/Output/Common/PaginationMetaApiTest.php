@@ -19,7 +19,7 @@ final class PaginationMetaApiTest extends ApiIntegrationTestCase
 {
     public function testBuildsMetaWithFilterAndSortFields(): void
     {
-        $user = $this->createVerifiedUser('meta-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('meta-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         for ($i = 0; $i < 12; ++$i) {
             $domain = new Domain($user, sprintf('domain-%d.example', $i));

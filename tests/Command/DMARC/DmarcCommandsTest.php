@@ -355,7 +355,7 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
 
     private function createReport(bool $isProcessed = true): Report
     {
-        $user = $this->createVerifiedUser('report-cmd-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-cmd-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $email = new Email();
         $email

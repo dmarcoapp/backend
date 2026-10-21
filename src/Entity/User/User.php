@@ -21,8 +21,6 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
 #[ORM\UniqueConstraint(name: 'UNIQ_IDENTIFIER_EMAIL', fields: ['email'])]
-#[ORM\UniqueConstraint(name: 'UNIQ_RESET_PASSWORD_TOKEN', fields: ['passwordResetToken'])]
-#[ORM\UniqueConstraint(name: 'UNIQ_EMAIL_VERIFICATION_TOKEN', fields: ['emailVerificationToken'])]
 #[ORM\UniqueConstraint(name: 'UNIQ_SHARED_POSTBOX_ID_TOKEN', fields: ['sharedPostboxIdentifierToken'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityInterface
 {
@@ -50,32 +48,20 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
     #[ORM\Column]
     private ?string $password = null;
 
-    #[ORM\Column(enumType: TwoFactorMethod::class, options: ['default' => TwoFactorMethod::EMAIL->value])]
-    private ?TwoFactorMethod $twoFactorMethod = TwoFactorMethod::EMAIL;
-
-    #[ORM\Column(length: 64, nullable: true)]
-    private ?string $twoFactorEmailSecret = null;
+    /**
+     * Null while two-factor authentication is off.
+     */
+    #[ORM\Column(nullable: true, enumType: TwoFactorMethod::class)]
+    private ?TwoFactorMethod $twoFactorMethod = null;
 
     #[ORM\Column(length: 64, nullable: true)]
     private ?string $twoFactorAppSecret = null;
-
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $passwordResetToken = null;
-
-    #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeInterface $passwordResetTokenExpiresAt = null;
 
     /**
      * @var Collection<int, Domain>
      */
     #[ORM\OneToMany(targetEntity: Domain::class, mappedBy: 'user', orphanRemoval: true)]
     private Collection $domains;
-
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $emailVerificationToken = null;
-
-    #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeInterface $emailVerificationTokenExpiresAt = null;
 
     #[ORM\Column(length: 255)]
     private ?string $name = null;
@@ -204,26 +190,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
         return $this;
     }
 
-    public function getTwoFactorMethod(): TwoFactorMethod
+    public function getTwoFactorMethod(): ?TwoFactorMethod
     {
-        return $this->twoFactorMethod ?? TwoFactorMethod::EMAIL;
+        return $this->twoFactorMethod;
     }
 
-    public function setTwoFactorMethod(TwoFactorMethod $twoFactorMethod): static
+    public function setTwoFactorMethod(?TwoFactorMethod $twoFactorMethod): static
     {
         $this->twoFactorMethod = $twoFactorMethod;
-
-        return $this;
-    }
-
-    public function getTwoFactorEmailSecret(): ?string
-    {
-        return $this->twoFactorEmailSecret;
-    }
-
-    public function setTwoFactorEmailSecret(?string $twoFactorEmailSecret): static
-    {
-        $this->twoFactorEmailSecret = $twoFactorEmailSecret;
 
         return $this;
     }
@@ -247,65 +221,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
         // @deprecated, to be removed when upgrading to Symfony 8
     }
 
-    public function getPasswordResetToken(): ?string
-    {
-        return $this->passwordResetToken;
-    }
-
-    public function setPasswordResetToken(?string $passwordResetToken): static
-    {
-        $this->passwordResetToken = $passwordResetToken;
-
-        return $this;
-    }
-
-    public function getPasswordResetTokenExpiresAt(): ?\DateTimeInterface
-    {
-        return $this->passwordResetTokenExpiresAt;
-    }
-
-    public function setPasswordResetTokenExpiresAt(?\DateTimeInterface $passwordResetTokenExpiresAt): static
-    {
-        $this->passwordResetTokenExpiresAt = $passwordResetTokenExpiresAt;
-
-        return $this;
-    }
-
     /**
      * @return Collection<int, Domain>
      */
     public function getDomains(): Collection
     {
         return $this->domains;
-    }
-
-    public function isVerified(): bool
-    {
-        return null === $this->emailVerificationToken;
-    }
-
-    public function getEmailVerificationToken(): ?string
-    {
-        return $this->emailVerificationToken;
-    }
-
-    public function setEmailVerificationToken(?string $emailVerificationToken): static
-    {
-        $this->emailVerificationToken = $emailVerificationToken;
-
-        return $this;
-    }
-
-    public function getEmailVerificationTokenExpiresAt(): ?\DateTimeInterface
-    {
-        return $this->emailVerificationTokenExpiresAt;
-    }
-
-    public function setEmailVerificationTokenExpiresAt(?\DateTimeInterface $emailVerificationTokenExpiresAt): static
-    {
-        $this->emailVerificationTokenExpiresAt = $emailVerificationTokenExpiresAt;
-
-        return $this;
     }
 
     public function getName(): ?string

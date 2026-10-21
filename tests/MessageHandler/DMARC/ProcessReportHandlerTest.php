@@ -28,7 +28,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
 {
     public function testInvokePopulatesReportAndRecords(): void
     {
-        $user = $this->createVerifiedUser('report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $email = new Email();
         $email
@@ -202,7 +202,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
 
     public function testInvokeMarksReportAsNotVerifiedWhenSenderDoesNotMatch(): void
     {
-        $user = $this->createVerifiedUser('report-fail-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-fail-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $email = new Email();
         $email
@@ -278,7 +278,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
 
     private function createReportWithXml(string $xml): Report
     {
-        $user = $this->createVerifiedUser('report-xml-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-xml-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $email = new Email();
         $email

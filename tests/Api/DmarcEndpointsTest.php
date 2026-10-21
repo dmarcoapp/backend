@@ -17,8 +17,8 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
 {
     public function testDomainsAndReportsRequireOwnership(): void
     {
-        $owner = $this->createVerifiedUser('owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('other@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('other@example.com', 'Str0ngPassw0rd!@#');
         self::assertNotNull($owner->getId());
         self::assertTrue($this->entityManager->contains($owner));
 

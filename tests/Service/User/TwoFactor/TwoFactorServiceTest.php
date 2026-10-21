@@ -21,12 +21,13 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(TwoFactorService::class)]
 final class TwoFactorServiceTest extends TestCase
 {
-    public function testGetMethodDefaultsToEmail(): void
+    public function testTwoFactorIsOffByDefault(): void
     {
         $service = $this->createService();
         $user = new User();
 
-        self::assertSame(TwoFactorMethod::EMAIL, $service->getMethod($user));
+        self::assertNull($service->getMethod($user));
+        self::assertFalse($service->isEnabled($user));
     }
 
     public function testGetAppOtpAuthUriContainsSecretAndIssuer(): void
@@ -43,17 +44,10 @@ final class TwoFactorServiceTest extends TestCase
         self::assertStringContainsString('issuer=DMARCo', $uri);
     }
 
-    public function testIsValidCodeForEmailAndApp(): void
+    public function testIsValidCodeForApp(): void
     {
         $service = $this->createService();
         $totp = new TwoFactorTotpService();
-
-        $emailUser = new User();
-        $emailUser->setTwoFactorMethod(TwoFactorMethod::EMAIL);
-        $emailUser->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
-        $emailCode = $totp->generateCode($emailUser->getTwoFactorEmailSecret() ?? '', 300, 6);
-
-        self::assertTrue($service->isValidCode($emailUser, $emailCode));
 
         $appUser = new User();
         $appUser->setTwoFactorMethod(TwoFactorMethod::APP);
@@ -61,6 +55,18 @@ final class TwoFactorServiceTest extends TestCase
         $appCode = $totp->generateCode($appUser->getTwoFactorAppSecret() ?? '', 30, 6);
 
         self::assertTrue($service->isValidCode($appUser, $appCode));
+        self::assertTrue($service->isEnabled($appUser));
+    }
+
+    public function testIsValidCodeRejectsEveryCodeWhileOff(): void
+    {
+        $service = $this->createService();
+
+        // A secret left behind from an earlier setup does not count.
+        $user = new User();
+        $user->setTwoFactorAppSecret(Base32Codec::encode('app-secret'));
+
+        self::assertFalse($service->isValidCode($user, $service->getAppCode($user)));
     }
 
     public function testIsValidCodeRejectsMissingAppSecret(): void
@@ -72,48 +78,14 @@ final class TwoFactorServiceTest extends TestCase
         self::assertFalse($service->isValidCode($user, '123456'));
     }
 
-    public function testGetEmailCodeAndAppCodeReturnSixDigits(): void
+    public function testGetAppCodeReturnsSixDigits(): void
     {
         $service = $this->createService();
-        $codec = new Base32Codec();
 
         $user = new User();
-        $user->setTwoFactorEmailSecret($codec->encode('email-secret'));
-        $user->setTwoFactorAppSecret($codec->encode('app-secret'));
+        $user->setTwoFactorAppSecret(Base32Codec::encode('app-secret'));
 
-        self::assertSame(6, strlen($service->getEmailCode($user)));
         self::assertSame(6, strlen($service->getAppCode($user)));
-    }
-
-    public function testEmailCodeWorksOnlyOnce(): void
-    {
-        $service = $this->createService();
-
-        $user = new User();
-        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
-        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
-
-        $code = $service->getEmailCode($user);
-
-        self::assertTrue($service->isValidCode($user, $code));
-        self::assertFalse($service->isValidCode($user, $code));
-    }
-
-    public function testAcceptingAnEmailCodeRetiresEveryOtherOneInFlight(): void
-    {
-        $service = $this->createService();
-
-        $user = new User();
-        $user->setTwoFactorMethod(TwoFactorMethod::EMAIL);
-        $user->setTwoFactorEmailSecret(Base32Codec::encode('email-secret'));
-
-        $secretBefore = $user->getTwoFactorEmailSecret();
-        self::assertTrue($service->isValidCode($user, $service->getEmailCode($user)));
-
-        // The next code the owner is mailed differs from the one just spent,
-        // even inside the same five minute step, so signing in again works.
-        self::assertNotSame($secretBefore, $user->getTwoFactorEmailSecret());
-        self::assertTrue($service->isValidCode($user, $service->getEmailCode($user)));
     }
 
     public function testAppCodeStaysReusableWithinItsWindow(): void
@@ -126,8 +98,8 @@ final class TwoFactorServiceTest extends TestCase
 
         $code = $service->getAppCode($user);
 
-        // Only the mailed codes are spent on use: an authenticator derives its
-        // own from a secret the owner shares with us and cannot be rotated here.
+        // An authenticator derives its codes from a secret the owner shares with
+        // us, which cannot be rotated here, so a code is not spent on use.
         self::assertTrue($service->isValidCode($user, $code));
         self::assertTrue($service->isValidCode($user, $code));
     }

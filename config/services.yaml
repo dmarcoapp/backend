@@ -4,12 +4,6 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-    app.auth.user.email_verification.token.ttl_seconds: 86400 # 24 hours
-    app.auth.user.email_verification.token.random_bytes: 32
-
-    app.auth.user.reset_password.token.ttl_seconds: 86400 # 24 hours
-    app.auth.user.reset_password.token.random_bytes: 32
-
     app.auth_log.retention_interval: '12 months'
 
 services:

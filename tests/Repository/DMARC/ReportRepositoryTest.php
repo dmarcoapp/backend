@@ -26,7 +26,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
 {
     public function testReportRepositoryAggregatesAndFiltersData(): void
     {
-        $user = $this->createVerifiedUser('report-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $repository = self::getContainer()->get(ReportRepository::class);
 
         $report1 = $this->createReportForUser(
@@ -142,7 +142,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
 
     public function testWeeklyQueriesCountMessagesByOutcome(): void
     {
-        $user = $this->createVerifiedUser('weekly-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('weekly-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $repository = self::getContainer()->get(ReportRepository::class);
         $utc = new \DateTimeZone('UTC');
 

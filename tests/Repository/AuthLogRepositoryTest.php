@@ -19,7 +19,7 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
 {
     public function testCountLoginSuccesses(): void
     {
-        $user = $this->createVerifiedUser('authlog@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('authlog@example.com', 'Str0ngPassw0rd!@#');
 
         $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '203.0.113.10');
         $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '198.51.100.7');
@@ -33,7 +33,7 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
 
     public function testHasLoginSuccessFromIp(): void
     {
-        $user = $this->createVerifiedUser('authlog-ip@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('authlog-ip@example.com', 'Str0ngPassw0rd!@#');
 
         $this->createAuthLog($user, AuthLogAction::LOGIN_SUCCESS, '203.0.113.10');
 
@@ -46,7 +46,7 @@ final class AuthLogRepositoryTest extends ApiIntegrationTestCase
 
     public function testDeleteOlderThanRemovesOnlyOldRows(): void
     {
-        $user = $this->createVerifiedUser('authlog-delete@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('authlog-delete@example.com', 'Str0ngPassw0rd!@#');
 
         $oldLog = new AuthLog();
         $oldLog

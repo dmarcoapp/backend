@@ -20,7 +20,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 {
     public function testGetEmailIdsWithoutReportReturnsOnlyMissingReports(): void
     {
-        $user = $this->createVerifiedUser('email-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $emailWithoutReport = $this->createEmail($user, new \DateTimeImmutable('-1 day'));
         $this->entityManager->persist($emailWithoutReport);
@@ -45,7 +45,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 
     public function testGetJunkEmailIdsToDeleteReturnsOnlyOldEmptyReports(): void
     {
-        $user = $this->createVerifiedUser('email-junk-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-junk-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $oldEmail = $this->createEmail($user, new \DateTimeImmutable('-10 days'));
         $oldReport = new Report();
@@ -84,7 +84,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 
     public function testSavePersistsEmail(): void
     {
-        $user = $this->createVerifiedUser('email-save-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-save-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $email = $this->createEmail($user, new \DateTimeImmutable('-1 day'));
 
@@ -97,7 +97,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 
     public function testDeleteByIdsRemovesEmails(): void
     {
-        $user = $this->createVerifiedUser('email-delete-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-delete-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $emailOne = $this->createEmail($user, new \DateTimeImmutable('-2 days'));
         $emailTwo = $this->createEmail($user, new \DateTimeImmutable('-1 day'));
@@ -128,7 +128,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 
     public function testGetEmailIdsWithoutReportHonorsLimit(): void
     {
-        $user = $this->createVerifiedUser('email-limit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-limit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $emailOne = $this->createEmail($user, new \DateTimeImmutable('-1 day'));
         $emailTwo = $this->createEmail($user, new \DateTimeImmutable('-1 day'));
@@ -145,7 +145,7 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
 
     public function testGetJunkEmailIdsToDeleteUsesMinimumRetention(): void
     {
-        $user = $this->createVerifiedUser('email-retention-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('email-retention-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $oldEmail = $this->createEmail($user, new \DateTimeImmutable('-2 days'));
         $oldReport = new Report();

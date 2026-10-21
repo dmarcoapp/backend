@@ -17,8 +17,6 @@ framework:
                 adapter: cache.adapter.redis
             anonymous_api_rate_limiter_pool:
                 adapter: cache.adapter.redis
-            anonymous_sendmail_rate_limiter_pool:
-                adapter: cache.adapter.redis
             logged_in_api_rate_limiter_pool:
                 adapter: cache.adapter.redis
             two_factor_rate_limiter_pool:

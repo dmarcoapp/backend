@@ -49,7 +49,6 @@ final class ProtectedEndpointsTest extends ApiTestCase
 
         yield ['DELETE', '/v1/user/blocklist/00000000-0000-0000-0000-000000000000'];
 
-        yield ['DELETE', '/v1/user/profile', ['email' => 'user@example.com']];
 
         yield ['GET', '/v1/user/dashboard'];
 

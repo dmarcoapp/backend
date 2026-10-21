@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
-use App\Controller\Auth\RegistrationController;
 use App\Entity\User\User;
-use Symfony\Component\String\ByteString;
+use App\Enum\User\TwoFactorMethod;
+use App\Service\User\TwoFactor\TwoFactorSecretGenerator;
+use App\Service\User\UserFactory;
 
 /**
  * @internal
@@ -15,46 +16,25 @@ use Symfony\Component\String\ByteString;
  */
 final class AuthFlowTest extends ApiIntegrationTestCase
 {
-    public function testRegisterVerifyLoginProfileFlow(): void
+    public function testAccountFromTheCommandLineSignsInWithItsPassword(): void
     {
+        self::getContainer()->get(UserFactory::class)->create(
+            email: 'flow@example.com',
+            name: 'Flow User',
+            plainPassword: 'Str0ngPassw0rd!@#',
+        );
 
-        $controller = self::getContainer()->get(RegistrationController::class);
-        $registrationEnabledProperty = new \ReflectionProperty($controller, 'registrationEnabled');
-        $registrationEnabledProperty->setAccessible(true);
-        self::assertTrue((bool) $registrationEnabledProperty->getValue($controller));
-
-        $userRepository = $this->entityManager->getRepository(User::class);
-        self::assertNull($userRepository->findOneBy(['email' => 'flow@example.com']));
-
-        $registerResponse = $this->requestJson(
+        // Two-factor authentication starts off, so the password alone signs in.
+        $loginResponse = $this->requestJson(
             method: 'POST',
-            uri: '/v1/auth/register',
+            uri: '/v1/auth/login_check',
             payload: [
-                'email' => 'flow@example.com',
-                'name' => 'Flow User',
+                'username' => 'flow@example.com',
                 'password' => 'Str0ngPassw0rd!@#',
             ],
         );
-
-        self::assertSame(200, $registerResponse->getStatusCode(), (string) $registerResponse->getContent());
-
-        $user = $userRepository->findOneBy(['email' => 'flow@example.com']);
-        self::assertNotNull($user);
-        self::assertNotNull($user->getEmailVerificationToken());
-
-        $verifyResponse = $this->requestJson(
-            method: 'POST',
-            uri: '/v1/auth/verify',
-            payload: [
-                'email' => 'flow@example.com',
-                'token' => $user->getEmailVerificationToken(),
-            ],
-        );
-
-        self::assertSame(200, $verifyResponse->getStatusCode());
-
-        $loginPayload = $this->loginPayload('flow@example.com', 'Str0ngPassw0rd!@#');
-        $token = $loginPayload['token'] ?? null;
+        self::assertSame(200, $loginResponse->getStatusCode(), (string) $loginResponse->getContent());
+        $token = json_decode((string) $loginResponse->getContent(), true, 512, JSON_THROW_ON_ERROR)['token'] ?? null;
         self::assertNotEmpty($token);
 
         $profileResponse = $this->requestJson(
@@ -76,6 +56,7 @@ final class AuthFlowTest extends ApiIntegrationTestCase
 
         self::assertSame(200, $patchResponse->getStatusCode());
 
+        // The account can only be removed on the server.
         $deleteResponse = $this->requestJson(
             method: 'DELETE',
             uri: '/v1/user/profile',
@@ -83,32 +64,35 @@ final class AuthFlowTest extends ApiIntegrationTestCase
             headers: $this->authorizeHeaders($token),
         );
 
-        self::assertSame(200, $deleteResponse->getStatusCode());
-        self::assertNull($userRepository->findOneBy(['email' => 'flow@example.com']));
+        self::assertSame(405, $deleteResponse->getStatusCode());
+        self::assertNotNull($this->entityManager->getRepository(User::class)->findOneBy(['email' => 'flow@example.com']));
     }
 
-    public function testLoginRejectsUnverifiedUser(): void
+    public function testLoginAsksForACodeOnceTwoFactorIsOn(): void
     {
-        $user = $this->createVerifiedUser('unverified@example.com', 'Str0ngPassw0rd!@#');
-        $user->setEmailVerificationToken(ByteString::fromRandom(32)->toString());
-        $user->setEmailVerificationTokenExpiresAt(new \DateTimeImmutable('+1 hour'));
+        $user = $this->createAccount('two-factor@example.com', 'Str0ngPassw0rd!@#');
+        $user
+            ->setTwoFactorMethod(TwoFactorMethod::APP)
+            ->setTwoFactorAppSecret(self::getContainer()->get(TwoFactorSecretGenerator::class)->generate())
+        ;
         $this->entityManager->flush();
 
         $loginResponse = $this->requestJson(
             method: 'POST',
             uri: '/v1/auth/login_check',
             payload: [
-                'username' => 'unverified@example.com',
+                'username' => 'two-factor@example.com',
                 'password' => 'Str0ngPassw0rd!@#',
             ],
         );
 
         self::assertSame(401, $loginResponse->getStatusCode(), (string) $loginResponse->getContent());
+        self::assertNotEmpty($this->login('two-factor@example.com', 'Str0ngPassw0rd!@#'));
     }
 
     public function testLogoutRequiresAuthenticationAndSucceedsWithToken(): void
     {
-        $this->createVerifiedUser('logout@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('logout@example.com', 'Str0ngPassw0rd!@#');
 
         $unauthResponse = $this->requestJson(
             method: 'POST',
@@ -132,7 +116,7 @@ final class AuthFlowTest extends ApiIntegrationTestCase
 
     public function testLogoutInvalidatesToken(): void
     {
-        $this->createVerifiedUser('logout2@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('logout2@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('logout2@example.com', 'Str0ngPassw0rd!@#');
 
@@ -156,7 +140,7 @@ final class AuthFlowTest extends ApiIntegrationTestCase
 
     public function testRefreshTokenFlowReturnsNewAccessToken(): void
     {
-        $this->createVerifiedUser('refresh@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('refresh@example.com', 'Str0ngPassw0rd!@#');
 
         $loginPayload = $this->loginPayload('refresh@example.com', 'Str0ngPassw0rd!@#');
         $refreshToken = $loginPayload['refresh_token'] ?? null;
@@ -176,7 +160,7 @@ final class AuthFlowTest extends ApiIntegrationTestCase
 
     public function testRefreshTokenIsSingleUse(): void
     {
-        $this->createVerifiedUser('refresh-single@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('refresh-single@example.com', 'Str0ngPassw0rd!@#');
 
         $loginPayload = $this->loginPayload('refresh-single@example.com', 'Str0ngPassw0rd!@#');
         $refreshToken = $loginPayload['refresh_token'] ?? null;
@@ -201,7 +185,7 @@ final class AuthFlowTest extends ApiIntegrationTestCase
 
     public function testLogoutInvalidatesRefreshToken(): void
     {
-        $this->createVerifiedUser('refresh-logout@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('refresh-logout@example.com', 'Str0ngPassw0rd!@#');
 
         $loginPayload = $this->loginPayload('refresh-logout@example.com', 'Str0ngPassw0rd!@#');
         $accessToken = $loginPayload['token'] ?? null;

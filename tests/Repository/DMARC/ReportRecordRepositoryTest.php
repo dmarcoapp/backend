@@ -27,7 +27,7 @@ final class ReportRecordRepositoryTest extends ApiIntegrationTestCase
 {
     public function testGetReportRecordsForReportPaginatedFiltersByReport(): void
     {
-        $user = $this->createVerifiedUser('records-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('records-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $report = $this->createReport($user, 'example.com');
         $otherReport = $this->createReport($user, 'other.example');

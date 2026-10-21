@@ -27,7 +27,7 @@ final class ReportRecordControllerTest extends ApiIntegrationTestCase
 {
     public function testListByReportReturnsRecordsForOwner(): void
     {
-        $user = $this->createVerifiedUser('records-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('records-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $report = $this->createReportWithRecord($user);
         $recordRepository = self::getContainer()->get(ReportRecordRepository::class);
         self::assertCount(1, $recordRepository->findBy(['report' => $report]));
@@ -50,10 +50,10 @@ final class ReportRecordControllerTest extends ApiIntegrationTestCase
 
     public function testListByReportRejectsNonOwner(): void
     {
-        $owner = $this->createVerifiedUser('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $report = $this->createReportWithRecord($owner);
 
-        $otherUser = $this->createVerifiedUser('other-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $otherUser = $this->createAccount('other-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $controller = new ReportRecordController(
             self::getContainer()->get(MicroMapperInterface::class),

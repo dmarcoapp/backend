@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Controller\User;
 
-use App\DTO\Input\User\Delete;
 use App\DTO\Input\User\Profile;
 use App\DTO\Output\User\UserApi;
 use App\Entity\User\User;
 use App\Event\User\PasswordChangeEvent;
 use App\Repository\User\UserRepository;
-use App\Service\User\UserDeleteProcessor;
 use Doctrine\ORM\EntityManagerInterface;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -35,7 +33,6 @@ final class ProfileController extends AbstractController
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly MicroMapperInterface $microMapper,
-        private readonly UserDeleteProcessor $userDeleteProcessor,
     ) {}
 
     #[OA\Response(
@@ -97,33 +94,6 @@ final class ProfileController extends AbstractController
         $this->entityManager->flush();
 
         return new JsonResponse($this->microMapper->map($user, UserApi::class));
-    }
-
-    #[OA\Response(
-        response: 200,
-        description: 'Profile successfully deleted.',
-        content: null
-    )]
-    #[OA\Delete(
-        summary: 'Deletes the authenticated user.',
-        security: [['Bearer' => []]],
-    )]
-    #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/profile', name: 'app_profile_delete', methods: [Request::METHOD_DELETE])]
-    public function delete(
-        #[MapRequestPayload]
-        Delete $input,
-        #[CurrentUser]
-        User $user,
-    ): JsonResponse {
-        $user = $this->getManagedUser($user);
-        if ($user->getEmail() !== $input->email) {
-            throw new BadRequestHttpException('Email does not match.');
-        }
-
-        $this->userDeleteProcessor->process($user);
-
-        return new JsonResponse();
     }
 
     private function getManagedUser(User $user): User

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Api;
 
 use App\Entity\User\User;
+use App\Enum\User\TwoFactorMethod;
+use App\Service\User\TwoFactor\TwoFactorSecretGenerator;
 use App\Service\User\TwoFactor\TwoFactorService;
 
 /**
@@ -16,7 +18,7 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
 {
     public function testLoginRequiresTwoFactorCodeThenSucceeds(): void
     {
-        $this->createVerifiedUser('twofactor-login@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccountWithAuthenticator('twofactor-login@example.com');
 
         $initialResponse = $this->requestJson(
             method: 'POST',
@@ -36,7 +38,7 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
         self::assertNotNull($user);
 
         $twoFactorService = self::getContainer()->get(TwoFactorService::class);
-        $code = $twoFactorService->getEmailCode($user);
+        $code = $twoFactorService->getAppCode($user);
 
         $loginResponse = $this->requestJson(
             method: 'POST',
@@ -55,7 +57,7 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
 
     public function testRepeatedWrongTwoFactorCodesAreThrottled(): void
     {
-        $this->createVerifiedUser('twofactor-bruteforce@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccountWithAuthenticator('twofactor-bruteforce@example.com');
 
         // The limiter pool is on disk in this environment, so it outlives the run.
         self::getContainer()->get('limiter.two_factor')
@@ -86,7 +88,7 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
 
     public function testEnableAndDisableAppTwoFactor(): void
     {
-        $this->createVerifiedUser('twofactor-app@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('twofactor-app@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('twofactor-app@example.com', 'Str0ngPassw0rd!@#');
 
@@ -140,13 +142,24 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
 
         self::assertSame(200, $disableResponse->getStatusCode(), (string) $disableResponse->getContent());
         $disablePayload = json_decode((string) $disableResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame('email', $disablePayload['twoFactorMethod'] ?? null);
+        self::assertNull($disablePayload['twoFactorMethod'] ?? null);
         self::assertFalse($disablePayload['twoFactorAppEnabled'] ?? true);
+
+        // Off again, so the password alone signs in.
+        $loginResponse = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/auth/login_check',
+            payload: [
+                'username' => 'twofactor-app@example.com',
+                'password' => 'Str0ngPassw0rd!@#',
+            ],
+        );
+        self::assertSame(200, $loginResponse->getStatusCode(), (string) $loginResponse->getContent());
     }
 
     public function testEnableTwoFactorAppRejectsInvalidCode(): void
     {
-        $this->createVerifiedUser('2fa-invalid@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('2fa-invalid@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('2fa-invalid@example.com', 'Str0ngPassw0rd!@#');
 
@@ -158,5 +171,15 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
         );
 
         self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
+    }
+
+    private function createAccountWithAuthenticator(string $email): void
+    {
+        $user = $this->createAccount($email, 'Str0ngPassw0rd!@#');
+        $user
+            ->setTwoFactorMethod(TwoFactorMethod::APP)
+            ->setTwoFactorAppSecret(self::getContainer()->get(TwoFactorSecretGenerator::class)->generate())
+        ;
+        $this->entityManager->flush();
     }
 }

@@ -28,7 +28,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 {
     public function testPaginateCoversFilterOperatorsAndSort(): void
     {
-        $user = $this->createVerifiedUser('pagination-trait-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('pagination-trait-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $domain = new Domain($user, 'example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));
@@ -63,7 +63,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateDefaultsToIdSortWhenSortEmpty(): void
     {
-        $user = $this->createVerifiedUser('pagination-default-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('pagination-default-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $domain = new Domain($user, 'default.example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));
@@ -103,7 +103,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateSupportsRelationFieldFilter(): void
     {
-        $user = $this->createVerifiedUser('pagination-relation-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('pagination-relation-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $reportA = $this->createReport($user, 'example.com');
         $reportB = $this->createReport($user, 'other.example');
@@ -132,7 +132,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateUsesProvidedQueryBuilderWhenPassedExplicitly(): void
     {
-        $user = $this->createVerifiedUser('pagination-explicit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('pagination-explicit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $domain = new Domain($user, 'explicit.example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));

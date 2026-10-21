@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Security\Authentication;
 
 use App\Entity\User\User;
-use App\Enum\User\TwoFactorMethod;
 use App\Event\Auth\TwoFactorFailureEvent;
-use App\Service\User\TwoFactor\TwoFactorCodeMailer;
 use App\Service\User\TwoFactor\TwoFactorService;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -24,7 +22,6 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
         #[Autowire(service: 'lexik_jwt_authentication.handler.authentication_success')]
         private AuthenticationSuccessHandlerInterface $inner,
         private TwoFactorService $twoFactorService,
-        private TwoFactorCodeMailer $twoFactorCodeMailer,
         private RateLimiterFactoryInterface $twoFactorLimiter,
         private EventDispatcherInterface $eventDispatcher,
     ) {}
@@ -33,14 +30,12 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
     public function onAuthenticationSuccess(Request $request, TokenInterface $token): ?Response
     {
         $user = $token->getUser();
-        if (!$user instanceof User) {
+        if (!$user instanceof User || !$this->twoFactorService->isEnabled($user)) {
             return $this->inner->onAuthenticationSuccess($request, $token);
         }
 
         $code = $this->extractCode($request);
         if (null === $code) {
-            $this->sendEmailCodeIfNeeded($user);
-
             return new JsonResponse(
                 [
                     'code' => Response::HTTP_UNAUTHORIZED,
@@ -82,16 +77,6 @@ final readonly class TwoFactorAuthenticationSuccessHandler implements Authentica
         $limiter->reset();
 
         return $this->inner->onAuthenticationSuccess($request, $token);
-    }
-
-    private function sendEmailCodeIfNeeded(User $user): void
-    {
-        if (TwoFactorMethod::EMAIL !== $this->twoFactorService->getMethod($user)) {
-            return;
-        }
-
-        $code = $this->twoFactorService->getEmailCode($user);
-        $this->twoFactorCodeMailer->sendCode($user, $code);
     }
 
     private function extractCode(Request $request): ?string

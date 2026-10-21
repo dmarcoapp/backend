@@ -24,7 +24,6 @@
         <env name="APP_ENV" value="test"/>
         <env name="APP_DEBUG" value="1"/>
         <env name="APP_SECRET" value="test-secret"/>
-        <env name="APP_REGISTRATION_ENABLED" value="true"/>
         <env name="APP_EMAIL_SENDER_ADDRESS" value="no-reply@example.test"/>
         <env name="APP_FRONTEND_URL" value="https://example.test"/>
         <env name="APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET" value="test-webhook-secret"/>
@@ -50,7 +49,6 @@
         <server name="APP_ENV" value="test"/>
         <server name="APP_DEBUG" value="1"/>
         <server name="APP_SECRET" value="test-secret"/>
-        <server name="APP_REGISTRATION_ENABLED" value="true"/>
         <server name="APP_EMAIL_SENDER_ADDRESS" value="no-reply@example.test"/>
         <server name="APP_FRONTEND_URL" value="https://example.test"/>
         <server name="APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET" value="test-webhook-secret"/>

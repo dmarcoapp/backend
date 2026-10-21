@@ -18,7 +18,7 @@ final class DomainRepositoryTest extends ApiIntegrationTestCase
 {
     public function testGetDomainsForUserPaginatedAppliesFilterAndSort(): void
     {
-        $user = $this->createVerifiedUser('domain-pagination-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('domain-pagination-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $domainA = new Domain($user, 'alpha.example.com');
         $domainA->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));

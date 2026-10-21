@@ -17,8 +17,8 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 {
     public function testListFiltersByUserAndPagination(): void
     {
-        $user = $this->createVerifiedUser('reports@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('other-reports@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('reports@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('other-reports@example.com', 'Str0ngPassw0rd!@#');
 
         $this->createReport($user, 'example.com', 5, true);
         $this->createReport($user, 'other.com', 2, false);
@@ -42,8 +42,8 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 
     public function testGetRejectsOtherUserReport(): void
     {
-        $user = $this->createVerifiedUser('report-owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('report-other@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('report-owner@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('report-other@example.com', 'Str0ngPassw0rd!@#');
 
         $report = $this->createReport($user, 'example.com', 1, true);
 
@@ -60,7 +60,7 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 
     public function testXmlReturnsRawXmlForOwner(): void
     {
-        $user = $this->createVerifiedUser('xml-owner@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('xml-owner@example.com', 'Str0ngPassw0rd!@#');
 
         $report = $this->createReport($user, 'example.com', 1, true, '<xml>raw</xml>');
 
@@ -79,7 +79,7 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 
     public function testDeleteRemovesOwnedReport(): void
     {
-        $user = $this->createVerifiedUser('delete-owner@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('delete-owner@example.com', 'Str0ngPassw0rd!@#');
 
         $report = $this->createReport($user, 'example.com', 1, true);
         self::assertNotNull($report->getId());
@@ -102,8 +102,8 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 
     public function testDeleteBulkRemovesOwnedReportsByIds(): void
     {
-        $owner = $this->createVerifiedUser('bulk-delete-owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('bulk-delete-other@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('bulk-delete-owner@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('bulk-delete-other@example.com', 'Str0ngPassw0rd!@#');
 
         $ownerReport1 = $this->createReport($owner, 'example.com', 1, true);
         $ownerReport2 = $this->createReport($owner, 'example.org', 2, true);
@@ -134,8 +134,8 @@ final class ReportControllerTest extends ApiIntegrationTestCase
 
     public function testDeleteBulkRejectsWhenAnyReportIsNotOwnedByAuthenticatedUser(): void
     {
-        $owner = $this->createVerifiedUser('bulk-delete-owner-2@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createVerifiedUser('bulk-delete-other-2@example.com', 'Str0ngPassw0rd!@#');
+        $owner = $this->createAccount('bulk-delete-owner-2@example.com', 'Str0ngPassw0rd!@#');
+        $other = $this->createAccount('bulk-delete-other-2@example.com', 'Str0ngPassw0rd!@#');
 
         $ownerReport = $this->createReport($owner, 'example.com', 1, true);
         $otherReport = $this->createReport($other, 'other.com', 3, true);

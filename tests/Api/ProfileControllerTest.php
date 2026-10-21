@@ -17,7 +17,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 {
     public function testPatchUpdatesNameAndPassword(): void
     {
-        $this->createVerifiedUser('profile@example.com', 'Str0ngPassw0rd!@#', 'Profile User');
+        $this->createAccount('profile@example.com', 'Str0ngPassw0rd!@#', 'Profile User');
 
         $token = $this->login('profile@example.com', 'Str0ngPassw0rd!@#');
 
@@ -45,7 +45,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 
     public function testPatchRejectsPasswordChangeWithoutCurrentPassword(): void
     {
-        $this->createVerifiedUser('no-current@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('no-current@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('no-current@example.com', 'Str0ngPassw0rd!@#');
 
@@ -62,7 +62,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 
     public function testPatchRejectsPasswordChangeWithWrongCurrentPassword(): void
     {
-        $this->createVerifiedUser('wrong-current@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('wrong-current@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('wrong-current@example.com', 'Str0ngPassw0rd!@#');
 
@@ -82,7 +82,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 
     public function testPatchUpdatesNameWithoutCurrentPassword(): void
     {
-        $this->createVerifiedUser('name-only@example.com', 'Str0ngPassw0rd!@#', 'Name Only');
+        $this->createAccount('name-only@example.com', 'Str0ngPassw0rd!@#', 'Name Only');
 
         $token = $this->login('name-only@example.com', 'Str0ngPassw0rd!@#');
 
@@ -101,45 +101,9 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
         self::assertSame('Renamed', $user->getName());
     }
 
-    public function testDeleteRejectsMismatchedEmail(): void
-    {
-        $this->createVerifiedUser('delete@example.com', 'Str0ngPassw0rd!@#');
-
-        $token = $this->login('delete@example.com', 'Str0ngPassw0rd!@#');
-
-        $response = $this->requestJson(
-            method: 'DELETE',
-            uri: '/v1/user/profile',
-            payload: ['email' => 'other@example.com'],
-            headers: $this->authorizeHeaders($token),
-        );
-
-        self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
-    }
-
-    public function testDeleteRemovesProfile(): void
-    {
-        $this->createVerifiedUser('delete-ok@example.com', 'Str0ngPassw0rd!@#');
-
-        $token = $this->login('delete-ok@example.com', 'Str0ngPassw0rd!@#');
-
-        $response = $this->requestJson(
-            method: 'DELETE',
-            uri: '/v1/user/profile',
-            payload: ['email' => 'delete-ok@example.com'],
-            headers: $this->authorizeHeaders($token),
-        );
-
-        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
-
-        $this->entityManager->clear();
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'delete-ok@example.com']);
-        self::assertNull($user);
-    }
-
     public function testGetAndPatchNotifications(): void
     {
-        $this->createVerifiedUser('notifications@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('notifications@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('notifications@example.com', 'Str0ngPassw0rd!@#');
 
@@ -178,7 +142,7 @@ final class ProfileControllerTest extends ApiIntegrationTestCase
 
     public function testGetReturnsTooManyRequestsWhenLoggedInRateLimited(): void
     {
-        $this->createVerifiedUser('rate-limit-profile@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('rate-limit-profile@example.com', 'Str0ngPassw0rd!@#');
 
         $token = $this->login('rate-limit-profile@example.com', 'Str0ngPassw0rd!@#');
         self::ensureKernelShutdown();

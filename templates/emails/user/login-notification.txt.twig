@@ -9,10 +9,10 @@ Your DMARCo account was signed in to from an IP address it has not seen before.
   Device      {{ userAgent ?? 'Unknown' }}
   Time        {{ occurredAt|date('Y-m-d H:i T') }}
 
-If this was you, there is nothing to do. If it was not, reset your password
-right away:
+If this was you, there is nothing to do. If it was not, set a new password on
+your server right away:
 
-{{ frontend_url }}/auth/forgot-password
+docker compose exec php bin/console app:user:reset-password
 {% endblock %}
 
 {% block footer %}

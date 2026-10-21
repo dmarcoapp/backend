@@ -6,17 +6,16 @@ namespace App\Tests\Command\Auth;
 
 use App\Command\User\CreateUserCommand;
 use App\Command\User\DeleteUserCommand;
+use App\Command\User\DisableTwoFactorCommand;
 use App\Command\User\ProcessUserDailyBulkCommand;
 use App\Command\User\ProcessUserDailyCommand;
 use App\Command\User\ProcessUserHourlyBulkCommand;
 use App\Command\User\ProcessUserHourlyCommand;
 use App\Command\User\ProcessUserWeeklyBulkCommand;
 use App\Command\User\ProcessUserWeeklyCommand;
-use App\Command\User\ResendUserEmailVerificationCommand;
 use App\Command\User\ResetUserPasswordCommand;
 use App\Entity\User\User;
-use App\Event\User\EmailVerificationResendEvent;
-use App\Event\User\PasswordResetEvent;
+use App\Enum\User\TwoFactorMethod;
 use App\Message\User\ProcessUserDaily;
 use App\Message\User\ProcessUserHourly;
 use App\Message\User\ProcessUserWeekly;
@@ -28,7 +27,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -39,13 +37,13 @@ use Symfony\Component\Uid\Uuid;
  */
 #[CoversClass(CreateUserCommand::class)]
 #[CoversClass(DeleteUserCommand::class)]
+#[CoversClass(DisableTwoFactorCommand::class)]
 #[CoversClass(ProcessUserDailyCommand::class)]
 #[CoversClass(ProcessUserDailyBulkCommand::class)]
 #[CoversClass(ProcessUserHourlyCommand::class)]
 #[CoversClass(ProcessUserHourlyBulkCommand::class)]
 #[CoversClass(ProcessUserWeeklyCommand::class)]
 #[CoversClass(ProcessUserWeeklyBulkCommand::class)]
-#[CoversClass(ResendUserEmailVerificationCommand::class)]
 #[CoversClass(ResetUserPasswordCommand::class)]
 final class AuthCommandsTest extends ApiIntegrationTestCase
 {
@@ -59,14 +57,14 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         );
 
         $tester = new CommandTester($command);
-        $tester->setInputs([$email, 'User', 'Str0ngPassw0rd!@#', 'ROLE_USER']);
+        $tester->setInputs([$email, 'User', 'Str0ngPassw0rd!@#']);
         $tester->execute([]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertNotNull(self::getContainer()->get(UserRepository::class)->findOneBy(['email' => $email]));
     }
 
-    public function testCreateUserCommandWithSimpleOptionDoesNotAskForRoles(): void
+    public function testCreateUserCommandStillAcceptsTheSimpleOption(): void
     {
         $email = 'cmd-simple-'.uniqid('', true).'@example.com';
 
@@ -75,7 +73,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
             self::getContainer()->get(UserRepository::class),
         );
 
-        // Only three answers are provided, so a roles question would fail the command.
+        // Installers released before the option lost its meaning still pass it.
         $tester = new CommandTester($command);
         $tester->setInputs([$email, 'User', 'Str0ngPassw0rd!@#']);
         $tester->execute(['--simple' => true]);
@@ -88,10 +86,28 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertSame(['ROLE_USER'], $user->getRoles());
     }
 
+    public function testCreateUserCommandAsksAgainForATooShortPassword(): void
+    {
+        $email = 'cmd-short-'.uniqid('', true).'@example.com';
+
+        $command = new CreateUserCommand(
+            self::getContainer()->get(UserFactory::class),
+            self::getContainer()->get(UserRepository::class),
+        );
+
+        $tester = new CommandTester($command);
+        $tester->setInputs([$email, 'User', 'short', 'Str0ngPassw0rd!@#']);
+        $tester->execute([]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Use at least 8 characters.', $tester->getDisplay());
+        self::assertNotNull(self::getContainer()->get(UserRepository::class)->findOneBy(['email' => $email]));
+    }
+
     public function testCreateUserCommandFailsWhenUserExists(): void
     {
         $email = 'cmd-existing-'.uniqid('', true).'@example.com';
-        $this->createVerifiedUser($email, 'Str0ngPassw0rd!@#');
+        $this->createAccount($email, 'Str0ngPassw0rd!@#');
 
         $command = new CreateUserCommand(
             self::getContainer()->get(UserFactory::class),
@@ -109,7 +125,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
     public function testDeleteUserCommandSuccess(): void
     {
         $email = 'cmd-delete-'.uniqid('', true).'@example.com';
-        $this->createVerifiedUser($email, 'Str0ngPassw0rd!@#');
+        $this->createAccount($email, 'Str0ngPassw0rd!@#');
 
         $command = new DeleteUserCommand(
             self::getContainer()->get(UserRepository::class),
@@ -172,7 +188,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserDailyCommandDispatches(): void
     {
-        $user = $this->createVerifiedUser('cmd-daily-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-daily-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -197,7 +213,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserDailyCommandPromptsForId(): void
     {
-        $user = $this->createVerifiedUser('cmd-daily-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-daily-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -288,7 +304,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserGeneralCommandDispatches(): void
     {
-        $user = $this->createVerifiedUser('cmd-general-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-general-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -313,7 +329,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserGeneralCommandPromptsForId(): void
     {
-        $user = $this->createVerifiedUser('cmd-general-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-general-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -401,7 +417,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserWeeklyCommandDispatches(): void
     {
-        $user = $this->createVerifiedUser('cmd-weekly-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-weekly-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -426,7 +442,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessUserWeeklyCommandPromptsForId(): void
     {
-        $user = $this->createVerifiedUser('cmd-weekly-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('cmd-weekly-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
@@ -512,45 +528,6 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
     }
 
-    public function testResendUserEmailVerificationCommandDispatches(): void
-    {
-        $user = new User();
-        $user->setEmail('resend@example.com');
-
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('findOneBy')->willReturn($user);
-
-        $dispatcher = $this->createMock(EventDispatcherInterface::class);
-        $dispatcher
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::isInstanceOf(EmailVerificationResendEvent::class))
-        ;
-
-        $command = new ResendUserEmailVerificationCommand($userRepository, $dispatcher);
-
-        $tester = new CommandTester($command);
-        $tester->setInputs(['resend@example.com']);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testResendUserEmailVerificationCommandFailsWhenMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('findOneBy')->willReturn(null);
-
-        $dispatcher = $this->createStub(EventDispatcherInterface::class);
-        $command = new ResendUserEmailVerificationCommand($userRepository, $dispatcher);
-
-        $tester = new CommandTester($command);
-        $tester->setInputs(['missing@example.com']);
-        $tester->execute([]);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
     public function testResetUserPasswordCommandHashesPassword(): void
     {
         $user = new User();
@@ -564,10 +541,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $hasher = $this->createStub(UserPasswordHasherInterface::class);
         $hasher->method('hashPassword')->willReturn('hashed');
 
-        $dispatcher = $this->createMock(EventDispatcherInterface::class);
-        $dispatcher->expects(self::never())->method('dispatch');
-
-        $command = new ResetUserPasswordCommand($userRepository, $hasher, $dispatcher);
+        $command = new ResetUserPasswordCommand($userRepository, $hasher);
 
         $tester = new CommandTester($command);
         $tester->setInputs(['reset@example.com', 'Str0ngPassw0rd!']);
@@ -575,32 +549,6 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertSame('hashed', $user->getPassword());
-    }
-
-    public function testResetUserPasswordCommandDispatchesWhenPasswordMissing(): void
-    {
-        $user = new User();
-        $user->setEmail('reset-email@example.com');
-
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('findOneBy')->willReturn($user);
-
-        $hasher = $this->createStub(UserPasswordHasherInterface::class);
-
-        $dispatcher = $this->createMock(EventDispatcherInterface::class);
-        $dispatcher
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::isInstanceOf(PasswordResetEvent::class))
-        ;
-
-        $command = new ResetUserPasswordCommand($userRepository, $hasher, $dispatcher);
-
-        $tester = new CommandTester($command);
-        $tester->setInputs(['reset-email@example.com', '']);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
     }
 
     public function testResetUserPasswordCommandFailsWhenUserMissing(): void
@@ -611,10 +559,43 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $command = new ResetUserPasswordCommand(
             $userRepository,
             $this->createStub(UserPasswordHasherInterface::class),
-            $this->createStub(EventDispatcherInterface::class),
         );
 
         $tester = new CommandTester($command);
+        $tester->setInputs(['missing@example.com']);
+        $tester->execute([]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+    }
+
+    public function testDisableTwoFactorCommandTurnsItOff(): void
+    {
+        $user = new User();
+        $user
+            ->setEmail('lost-phone@example.com')
+            ->setTwoFactorMethod(TwoFactorMethod::APP)
+            ->setTwoFactorAppSecret('SECRET')
+        ;
+
+        $userRepository = $this->createMock(UserRepository::class);
+        $userRepository->method('findOneBy')->willReturn($user);
+        $userRepository->expects(self::once())->method('save')->with($user);
+
+        $tester = new CommandTester(new DisableTwoFactorCommand($userRepository));
+        $tester->setInputs(['lost-phone@example.com']);
+        $tester->execute([]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertNull($user->getTwoFactorMethod());
+        self::assertNull($user->getTwoFactorAppSecret());
+    }
+
+    public function testDisableTwoFactorCommandFailsWhenUserMissing(): void
+    {
+        $userRepository = $this->createStub(UserRepository::class);
+        $userRepository->method('findOneBy')->willReturn(null);
+
+        $tester = new CommandTester(new DisableTwoFactorCommand($userRepository));
         $tester->setInputs(['missing@example.com']);
         $tester->execute([]);
 

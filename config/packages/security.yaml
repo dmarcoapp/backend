@@ -12,7 +12,6 @@ security:
     firewalls:
         login:
             pattern: ^/v1/auth/login_check
-            user_checker: App\Security\UserChecker
             stateless: true
             login_throttling:
                 max_attempts: 10
@@ -24,7 +23,6 @@ security:
 
         api:
             provider: app_user_provider
-            user_checker: App\Security\UserChecker
             stateless: true
             entry_point: jwt
             jwt: ~
@@ -33,16 +31,12 @@ security:
     # Easy way to control access for large sections of your site
     # Note: Only the *first* access control that matches will be used
     access_control:
-        - { path: ^/v1/auth/login_check,                 roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/register,                    roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/verify,                      roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/request_verification_resend, roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/reset_password,              roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/request_password_reset,      roles: PUBLIC_ACCESS }
-        - { path: ^/v1/auth/token_refresh,               roles: PUBLIC_ACCESS }
-        - { path: ^/v1/webhook,                          roles: PUBLIC_ACCESS }
-        - { path: ^/v1/doc,                              roles: PUBLIC_ACCESS }
-        - { path: ^/v1,                                  roles: IS_AUTHENTICATED_FULLY }
+        - { path: ^/v1/auth/login_check,   roles: PUBLIC_ACCESS }
+        - { path: ^/v1/auth/status,        roles: PUBLIC_ACCESS }
+        - { path: ^/v1/auth/token_refresh, roles: PUBLIC_ACCESS }
+        - { path: ^/v1/webhook,            roles: PUBLIC_ACCESS }
+        - { path: ^/v1/doc,                roles: PUBLIC_ACCESS }
+        - { path: ^/v1,                    roles: IS_AUTHENTICATED_FULLY }
 
 when@test:
     security:

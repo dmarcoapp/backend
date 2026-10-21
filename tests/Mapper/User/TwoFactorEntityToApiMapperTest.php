@@ -23,11 +23,10 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(TwoFactorEntityToApiMapper::class)]
 final class TwoFactorEntityToApiMapperTest extends TestCase
 {
-    public function testPopulateReturnsSetupDataForEmailMode(): void
+    public function testPopulateReturnsSetupDataWhileOff(): void
     {
         $user = (new User())
             ->setEmail('user@example.com')
-            ->setTwoFactorMethod(TwoFactorMethod::EMAIL)
         ;
 
         $mapper = $this->createMapper();
@@ -35,7 +34,7 @@ final class TwoFactorEntityToApiMapperTest extends TestCase
         $dto = $mapper->load($user, TwoFactorApi::class, []);
         $mapper->populate($user, $dto, []);
 
-        self::assertSame('email', $dto->twoFactorMethod);
+        self::assertNull($dto->twoFactorMethod);
         self::assertFalse($dto->twoFactorAppEnabled ?? true);
         self::assertNotEmpty($dto->twoFactorAppSecret);
         self::assertStringStartsWith('otpauth://totp/', $dto->twoFactorAppOtpAuthUri ?? '');

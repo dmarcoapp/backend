@@ -53,7 +53,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         $storage = $this->createStub(AwsS3V3Adapter::class);
 
-        $user = $this->createVerifiedUser('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $email = $this->createEmail($user, 'report.xml');
         $emailRepository->save($email);
 
@@ -97,7 +97,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         $storage = $this->createStub(AwsS3V3Adapter::class);
 
-        $user = $this->createVerifiedUser('owner-existing-report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('owner-existing-report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $email = $this->createEmail($user, 'report.xml');
         $emailRepository->save($email);
 
@@ -139,7 +139,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         $logger = $this->createMock(LoggerInterface::class);
 
-        $user = $this->createVerifiedUser('owner-unsupported-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $user = $this->createAccount('owner-unsupported-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $email = $this->createEmail($user, 'report.zip');
         $emailRepository->save($email);
 

@@ -35,17 +35,14 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         $this->getEntityManager()->flush();
     }
 
-    public function getUnverifiedUserIdsToDelete(): array
+    public function hasAny(): bool
     {
-        $queryBuilder = $this->createQueryBuilder('u');
-        $queryBuilder
+        return null !== $this->createQueryBuilder('u')
             ->select('u.id')
-            ->where('u.emailVerificationToken IS NOT NULL')
-            ->andWhere('u.emailVerificationTokenExpiresAt < :threshold')
-            ->setParameter('threshold', new \DateTime('-30 minutes'))
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult()
         ;
-
-        return $queryBuilder->getQuery()->getSingleColumnResult();
     }
 
     public function getAllUserIds(?int $limit = null): array
@@ -60,17 +57,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         }
 
         return $queryBuilder->getQuery()->getSingleColumnResult();
-    }
-
-    public function deleteByIds(array $ids): void
-    {
-        $this->createQueryBuilder('u')
-            ->delete()
-            ->where('u.id IN (:ids)')
-            ->setParameter('ids', $ids)
-            ->getQuery()
-            ->execute()
-        ;
     }
 
     public function save(User $user): void

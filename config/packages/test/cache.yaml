@@ -7,8 +7,6 @@ framework:
                 adapter: cache.adapter.filesystem
             anonymous_api_rate_limiter_pool:
                 adapter: cache.adapter.array
-            anonymous_sendmail_rate_limiter_pool:
-                adapter: cache.adapter.array
             logged_in_api_rate_limiter_pool:
                 adapter: cache.adapter.array
             # Filesystem rather than array, so the limiter's state survives the

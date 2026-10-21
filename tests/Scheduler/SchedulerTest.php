@@ -18,7 +18,6 @@ use App\Scheduler\Auth\ClearInvalidRefreshTokens;
 use App\Scheduler\Auth\ClearOldAuthLogs;
 use App\Scheduler\DMARC\ProcessDomainProducer;
 use App\Scheduler\Email\ClearInvalidEmails;
-use App\Scheduler\User\ClearUnverifiedUsers;
 use App\Scheduler\User\ProcessUserDailyProducer;
 use App\Scheduler\User\ProcessUserHourlyProducer;
 use App\Scheduler\User\ProcessUserWeeklyProducer;
@@ -33,7 +32,6 @@ use Symfony\Component\Uid\Uuid;
  */
 #[CoversClass(ClearInvalidRefreshTokens::class)]
 #[CoversClass(ClearOldAuthLogs::class)]
-#[CoversClass(ClearUnverifiedUsers::class)]
 #[CoversClass(ProcessUserDailyProducer::class)]
 #[CoversClass(ProcessUserHourlyProducer::class)]
 #[CoversClass(ProcessUserWeeklyProducer::class)]
@@ -48,17 +46,6 @@ final class SchedulerTest extends TestCase
         $scheduler();
 
         self::assertTrue(true);
-    }
-
-    public function testClearUnverifiedUsersDeletesInChunks(): void
-    {
-        $repository = $this->createMock(UserRepository::class);
-        $repository->method('getUnverifiedUserIdsToDelete')->willReturn(['a', 'b']);
-        $repository->expects(self::once())->method('deleteByIds')->with(['a', 'b']);
-
-        $scheduler = new ClearUnverifiedUsers($repository);
-
-        $scheduler();
     }
 
     public function testClearOldAuthLogsDeletesOlderThanThreshold(): void
