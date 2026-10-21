@@ -21,7 +21,7 @@ final readonly class IpWhoisLookupService implements IpLookupInterface
 
         $response = $this->httpClient->request(
             'GET',
-            'http://ipwho.is/'.rawurlencode($ip),
+            'https://ipwho.is/'.rawurlencode($ip),
             ['timeout' => 5]
         );
 

@@ -25,6 +25,20 @@ final class IpWhoisLookupServiceTest extends TestCase
         $service->lookup('invalid-ip');
     }
 
+    public function testLookupUsesHttps(): void
+    {
+        $requestedUrl = null;
+        $httpClient = new MockHttpClient(static function (string $method, string $url) use (&$requestedUrl): MockResponse {
+            $requestedUrl = $url;
+
+            return new MockResponse(json_encode(['success' => false], JSON_THROW_ON_ERROR));
+        });
+
+        new IpWhoisLookupService($httpClient)->lookup('192.0.2.1');
+
+        self::assertSame('https://ipwho.is/192.0.2.1', $requestedUrl);
+    }
+
     public function testLookupReturnsEmptyWhenResponseNotOk(): void
     {
         $httpClient = new MockHttpClient([

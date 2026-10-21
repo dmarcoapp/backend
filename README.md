@@ -133,6 +133,7 @@ Important settings:
 | `APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN` | Domain used to build per-user DMARC aggregate report mailbox addresses |
 | `APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET` | HMAC secret for inbound report webhooks |
 | `APP_REPORT_RETENTION_DAYS` | Number of days to retain processed reports; `0` disables automatic deletion |
+| `APP_IP_LOOKUP_ENABLED` | Looks up who owns each sending IP address, at ipwho.is and the regional internet registries; `false` keeps every address on the server |
 | `CORS_ALLOW_ORIGIN` | Allowed browser origins for the API |
 | `DATABASE_URL` | PostgreSQL connection URL |
 | `MAILER_DSN` | Symfony Mailer DSN |

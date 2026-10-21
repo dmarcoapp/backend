@@ -25,6 +25,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService(new MockHttpClient()),
             new RdapLookupService(new MockHttpClient()),
             new ArrayAdapter(),
+            true,
         );
 
         $this->expectException(\InvalidArgumentException::class);
@@ -83,6 +84,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService($ipWhoisClient),
             new RdapLookupService($rdapClient),
             new ArrayAdapter(),
+            true,
         );
 
         $result = $service->lookup('192.0.2.1');
@@ -141,6 +143,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService($ipWhoisClient),
             new RdapLookupService($rdapClient),
             $cache,
+            true,
         );
 
         $first = $service->lookup('198.51.100.10');
@@ -149,5 +152,29 @@ final class CompositeIpLookupServiceTest extends TestCase
         self::assertSame($first, $second);
         self::assertSame(1, $ipWhoisClient->getRequestsCount());
         self::assertSame(2, $rdapClient->getRequestsCount());
+    }
+
+    public function testLookupSendsNothingWhenDisabled(): void
+    {
+        $ipWhoisClient = new MockHttpClient();
+        $rdapClient = new MockHttpClient();
+
+        $service = new CompositeIpLookupService(
+            new IpWhoisLookupService($ipWhoisClient),
+            new RdapLookupService($rdapClient),
+            new ArrayAdapter(),
+            false,
+        );
+
+        self::assertSame([
+            'name' => null,
+            'country' => null,
+            'email' => [
+                'abuse' => null,
+                'tech' => null,
+            ],
+        ], $service->lookup('192.0.2.1'));
+        self::assertSame(0, $ipWhoisClient->getRequestsCount());
+        self::assertSame(0, $rdapClient->getRequestsCount());
     }
 }
