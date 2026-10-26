@@ -7,6 +7,7 @@ namespace App\Entity\Email;
 use App\Entity\DMARC\Report;
 use App\Entity\User\User;
 use App\Repository\Email\EmailRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Uid\Uuid;
@@ -34,16 +35,16 @@ class Email
     private ?string $messageId = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $attachmentBucket = null;
-
-    #[ORM\Column(length: 255)]
-    private ?string $attachmentKey = null;
-
-    #[ORM\Column(length: 255)]
     private ?string $attachmentFilename = null;
 
     #[ORM\Column(length: 255)]
     private ?string $attachmentContentType = null;
+
+    /**
+     * The report XML, kept only until it has become a report.
+     */
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $attachmentContent = null;
 
     #[ORM\OneToOne(mappedBy: 'email', cascade: ['persist', 'remove'])]
     private ?Report $report = null;
@@ -105,30 +106,6 @@ class Email
         return $this;
     }
 
-    public function getAttachmentBucket(): ?string
-    {
-        return $this->attachmentBucket;
-    }
-
-    public function setAttachmentBucket(string $attachmentBucket): static
-    {
-        $this->attachmentBucket = $attachmentBucket;
-
-        return $this;
-    }
-
-    public function getAttachmentKey(): ?string
-    {
-        return $this->attachmentKey;
-    }
-
-    public function setAttachmentKey(string $attachmentKey): static
-    {
-        $this->attachmentKey = $attachmentKey;
-
-        return $this;
-    }
-
     public function getAttachmentFilename(): ?string
     {
         return $this->attachmentFilename;
@@ -149,6 +126,18 @@ class Email
     public function setAttachmentContentType(string $attachmentContentType): static
     {
         $this->attachmentContentType = $attachmentContentType;
+
+        return $this;
+    }
+
+    public function getAttachmentContent(): ?string
+    {
+        return $this->attachmentContent;
+    }
+
+    public function setAttachmentContent(?string $attachmentContent): static
+    {
+        $this->attachmentContent = $attachmentContent;
 
         return $this;
     }

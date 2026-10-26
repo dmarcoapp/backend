@@ -37,8 +37,6 @@ final class ReportEntityToApiMapperTest extends TestCase
             ->setFromAddress('sender@example.com')
             ->setToAddress('inbound@example.com')
             ->setMessageId('<msg@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('key')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
             ->setOwner($user)

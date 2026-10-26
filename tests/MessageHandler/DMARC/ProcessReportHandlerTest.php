@@ -7,6 +7,8 @@ namespace App\Tests\MessageHandler\DMARC;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
 use App\Entity\Email\Email;
+use App\Enum\DMARC\DispositionType;
+use App\Enum\DMARC\SPFResult;
 use App\Message\DMARC\ProcessReport;
 use App\MessageHandler\DMARC\ProcessReportHandler;
 use App\Repository\DMARC\ReportRecordRepository;
@@ -36,8 +38,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
             ->setFromAddress('noreply-dmarc-support@google.com')
             ->setToAddress('inbound@example.com')
             ->setMessageId('<message@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('path/report.xml')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
             ->setOwner($user)
@@ -67,7 +67,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $ipLookup,
             $this->createStub(LoggerInterface::class)
         );
@@ -107,7 +107,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -126,7 +126,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -144,7 +144,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -161,7 +161,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -188,7 +188,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $ipLookup,
             $logger
         );
@@ -210,8 +210,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
             ->setFromAddress('other@example.com')
             ->setToAddress('inbound@example.com')
             ->setMessageId('<message-mismatch@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('path/report.xml')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
             ->setOwner($user)
@@ -231,7 +229,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -257,7 +255,7 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessReportHandler(
             self::getContainer()->get(ReportRepository::class),
             $this->entityManager,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->createStub(IpLookupInterface::class),
             $this->createStub(LoggerInterface::class)
         );
@@ -269,11 +267,148 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         self::assertTrue($report->isVerified());
     }
 
+    public function testInvokeProcessesRfc9990ReportWithoutSpfResult(): void
+    {
+        $report = $this->createReportWithXml($this->rfc9990Xml(<<<'XML'
+<dkim>
+  <domain>example.com</domain>
+  <selector>selector</selector>
+  <result>pass</result>
+</dkim>
+XML));
+
+        $this->rfc9990Handler()(new ProcessReport($report->getId()->toRfc4122()));
+
+        $this->entityManager->refresh($report);
+
+        self::assertTrue($report->isProcessed());
+        self::assertSame('https://support.google.com/a/answer/2466580', $report->getReportingOrganizationExtraContact());
+        self::assertNull($report->getPctPolicy());
+        self::assertNull($report->getAdkimPolicy());
+        self::assertSame(3, $report->getSumCount());
+
+        $records = self::getContainer()->get(ReportRecordRepository::class)->findBy(['report' => $report]);
+
+        self::assertCount(1, $records);
+        self::assertInstanceOf(ReportRecord::class, $records[0]);
+        self::assertSame('selector', $records[0]->getDkimSelector());
+        self::assertSame('', $records[0]->getSpfDomain());
+        self::assertSame(SPFResult::UNKNOWN, $records[0]->getSpfAuth());
+    }
+
+    public function testInvokeStoresRfc9990PassDispositionAsDelivered(): void
+    {
+        $report = $this->createReportWithXml($this->rfc9990Xml(<<<'XML'
+<dkim>
+  <domain>example.com</domain>
+  <selector>selector</selector>
+  <result>pass</result>
+</dkim>
+XML));
+
+        $this->rfc9990Handler()(new ProcessReport($report->getId()->toRfc4122()));
+
+        $this->entityManager->refresh($report);
+
+        $records = self::getContainer()->get(ReportRecordRepository::class)->findBy(['report' => $report]);
+
+        self::assertCount(1, $records);
+        self::assertSame(DispositionType::NONE, $records[0]->getDisposition());
+        self::assertSame(1.0, $report->getDmarcCompliance());
+    }
+
+    public function testInvokeStoresRfc9990SpfPolicyResult(): void
+    {
+        $report = $this->createReportWithXml($this->rfc9990Xml(<<<'XML'
+<dkim>
+  <domain>example.com</domain>
+  <selector>selector</selector>
+  <result>pass</result>
+</dkim>
+<spf>
+  <domain>example.com</domain>
+  <result>policy</result>
+</spf>
+XML));
+
+        $this->rfc9990Handler()(new ProcessReport($report->getId()->toRfc4122()));
+
+        $this->entityManager->refresh($report);
+
+        self::assertTrue($report->isProcessed());
+
+        $records = self::getContainer()->get(ReportRecordRepository::class)->findBy(['report' => $report]);
+
+        self::assertCount(1, $records);
+        self::assertSame(SPFResult::POLICY, $records[0]->getSpfAuth());
+        self::assertSame('example.com', $records[0]->getSpfDomain());
+    }
+
     private function schemaSource(): string
     {
         $path = \dirname(__DIR__, 3).'/config/dmarc/rua.xsd';
 
         return (string) file_get_contents($path);
+    }
+
+    private function rfc9990SchemaSource(): string
+    {
+        $path = \dirname(__DIR__, 3).'/config/dmarc/rfc9990.xsd';
+
+        return (string) file_get_contents($path);
+    }
+
+    private function rfc9990Handler(): ProcessReportHandler
+    {
+        return new ProcessReportHandler(
+            self::getContainer()->get(ReportRepository::class),
+            $this->entityManager,
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
+            $this->createStub(IpLookupInterface::class),
+            $this->createStub(LoggerInterface::class)
+        );
+    }
+
+    private function rfc9990Xml(string $authResults): string
+    {
+        return <<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<feedback xmlns="urn:ietf:params:xml:ns:dmarc-2.0">
+  <version>1.0</version>
+  <report_metadata>
+    <org_name>google.com</org_name>
+    <email>noreply-dmarc-support@google.com</email>
+    <extra_contact_info lang="en">https://support.google.com/a/answer/2466580</extra_contact_info>
+    <report_id>rfc9990-report</report_id>
+    <date_range>
+      <begin>1700000000</begin>
+      <end>1700086400</end>
+    </date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>example.com</domain>
+    <p>reject</p>
+    <np>reject</np>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>192.0.2.1</source_ip>
+      <count>3</count>
+      <policy_evaluated>
+        <disposition>pass</disposition>
+        <dkim>pass</dkim>
+        <spf>fail</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>example.com</header_from>
+    </identifiers>
+    <auth_results>
+{$authResults}
+    </auth_results>
+  </record>
+</feedback>
+XML;
     }
 
     private function createReportWithXml(string $xml): Report
@@ -286,8 +421,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
             ->setFromAddress('noreply-dmarc-support@google.com')
             ->setToAddress('inbound@example.com')
             ->setMessageId('<message@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('path/report.xml')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
             ->setOwner($user)

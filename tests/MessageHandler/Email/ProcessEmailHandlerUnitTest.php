@@ -16,7 +16,6 @@ use App\Repository\Email\EmailRepository;
 use App\Service\DMARC\ReportXMLProcessor;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -60,8 +59,10 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
     }
 
-    public function testInvokeThrowsWhenAttachmentKeyMissing(): void
+    public function testInvokeThrowsWhenAttachmentContentMissing(): void
     {
+        // What an email that arrived before the upgrade, and still pointed at
+        // object storage, looks like to the handler.
         $email = $this->createEmailEntityWithOwner();
         $this->setEntityId($email, Uuid::v4());
         $email->setAttachmentFilename('report.xml');
@@ -72,7 +73,7 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $handler = $this->createHandler($emailRepository, $this->createStub(ReportRepository::class));
 
         $this->expectException(UnrecoverableMessageHandlingException::class);
-        $this->expectExceptionMessage('Email attachment key is missing.');
+        $this->expectExceptionMessage('Email attachment content is missing.');
         $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
     }
 
@@ -82,7 +83,6 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $this->setEntityId($email, Uuid::v4());
         $email
             ->setAttachmentFilename('report.xml')
-            ->setAttachmentKey('path/report.xml')
         ;
 
         $emailRepository = $this->createStub(EmailRepository::class);
@@ -100,7 +100,7 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $email = $this->createEmailEntityWithOwner();
         $this->setEntityId($email, Uuid::v4());
         $email->setAttachmentFilename('report.xml');
-        $email->setAttachmentKey('path/report.xml');
+        $email->setAttachmentContent($this->validXml());
 
         $emailRepository = $this->createStub(EmailRepository::class);
         $emailRepository->method('find')->willReturn($email);
@@ -122,24 +122,25 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus->expects(self::never())->method('dispatch');
 
-        $storage = $this->createStub(AwsS3V3Adapter::class);
-        $storage->method('fileExists')->willReturn(true);
-        $storage->method('read')->willReturn($this->validXml());
-
         $handler = new ProcessEmailHandler(
             $emailRepository,
             $domainRepository,
             $reportRepository,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $entityManager,
             $messageBus,
-            $storage,
             $this->createStub(LoggerInterface::class),
         );
 
-        $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('Report ID is missing.');
-        $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
+        try {
+            $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
+            self::fail('The missing report ID went unnoticed.');
+        } catch (\LogicException $e) {
+            self::assertSame('Report ID is missing.', $e->getMessage());
+        }
+
+        // The report took the XML over before the flush, so the email holds no copy.
+        self::assertNull($email->getAttachmentContent());
     }
 
     private function createHandler(EmailRepository $emailRepository, ReportRepository $reportRepository): ProcessEmailHandler
@@ -151,10 +152,9 @@ final class ProcessEmailHandlerUnitTest extends TestCase
             $emailRepository,
             $this->createStub(DomainRepository::class),
             $reportRepository,
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $entityManager,
             $this->createStub(MessageBusInterface::class),
-            $this->createStub(AwsS3V3Adapter::class),
             $this->createStub(LoggerInterface::class),
         );
     }
@@ -191,6 +191,13 @@ final class ProcessEmailHandlerUnitTest extends TestCase
     private function schemaSource(): string
     {
         $path = \dirname(__DIR__, 3).'/config/dmarc/rua.xsd';
+
+        return (string) file_get_contents($path);
+    }
+
+    private function rfc9990SchemaSource(): string
+    {
+        $path = \dirname(__DIR__, 3).'/config/dmarc/rfc9990.xsd';
 
         return (string) file_get_contents($path);
     }

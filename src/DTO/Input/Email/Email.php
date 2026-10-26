@@ -31,17 +31,10 @@ final readonly class Email
         #[Assert\All(constraints: [
             new Assert\Collection(
                 fields: [
-                    'id' => new Assert\Required(constraints: [
+                    // The report XML, gzip-compressed and base64-encoded.
+                    'content' => new Assert\Required(constraints: [
                         new Assert\NotBlank(),
-                        new Assert\Uuid(),
-                    ]),
-                    'bucket' => new Assert\Required(constraints: [
-                        new Assert\NotBlank(),
-                        new Assert\Length(max: 255),
-                    ]),
-                    'key' => new Assert\Required(constraints: [
-                        new Assert\NotBlank(),
-                        new Assert\Length(max: 255),
+                        new Assert\Type('string'),
                     ]),
                     'filename' => new Assert\Required(constraints: [
                         new Assert\NotBlank(),

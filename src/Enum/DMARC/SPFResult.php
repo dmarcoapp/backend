@@ -10,6 +10,7 @@ enum SPFResult: string
     case FAIL = 'fail';
     case PASS = 'pass';
     case NEUTRAL = 'neutral';
+    case POLICY = 'policy';
     case SOFTFAIL = 'softfail';
     case TEMPERROR = 'temperror';
     case PERMERROR = 'permerror';

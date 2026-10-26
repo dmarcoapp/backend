@@ -104,7 +104,7 @@ final readonly class ProcessReportHandler
             $reportRecord = new ReportRecord()
                 ->setSourceIp($rowDTO->getSourceIp())
                 ->setCount($rowDTO->getCount())
-                ->setDisposition(DispositionType::tryFrom($policyEvaluatedDTO->getDisposition()) ?? DispositionType::UNKNOWN)
+                ->setDisposition($this->disposition($policyEvaluatedDTO->getDisposition()))
                 ->setDkimAlign(DKIMAlign::tryFrom($policyEvaluatedDTO->getDkim()) ?? DKIMAlign::UNKNOWN)
                 ->setSpfAlign(SPFAlign::tryFrom($policyEvaluatedDTO->getSpf()) ?? SPFAlign::UNKNOWN)
                 ->setDkimAuth( // TODO: DKIMResult enum or object ??
@@ -117,7 +117,7 @@ final readonly class ProcessReportHandler
                     implode('/', array_map(fn (Dkim $dkim) => $dkim->getSelector(), $dkimAuthResultDTO))
                 )
                 ->setSpfAuth(
-                    SPFResult::tryFrom($spfAuthResultDTO[0]?->getResult() ?? 'unknown')
+                    SPFResult::tryFrom(($spfAuthResultDTO[0] ?? null)?->getResult() ?? 'unknown') ?? SPFResult::UNKNOWN
                 )
                 ->setSpfDomain(
                     implode('/', array_map(fn (Spf $spf) => $spf->getDomain(), $spfAuthResultDTO))
@@ -181,6 +181,19 @@ final readonly class ProcessReportHandler
         ;
 
         $this->entityManager->flush();
+    }
+
+    /**
+     * RFC 9990 reports "pass" for messages that passed DMARC under an
+     * enforcing policy. Nothing was done to them, the same as "none".
+     */
+    private function disposition(string $disposition): DispositionType
+    {
+        if ('pass' === $disposition) {
+            return DispositionType::NONE;
+        }
+
+        return DispositionType::tryFrom($disposition) ?? DispositionType::UNKNOWN;
     }
 
     private function checkLegitimacy(Feedback $feedback, string $emailFromAddress): bool

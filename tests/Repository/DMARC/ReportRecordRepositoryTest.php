@@ -63,8 +63,6 @@ final class ReportRecordRepositoryTest extends ApiIntegrationTestCase
             ->setFromAddress('reporter@example.com')
             ->setToAddress('inbound@example.com')
             ->setMessageId('<message@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('path/report.xml')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
             ->setOwner($user)

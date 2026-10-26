@@ -18,10 +18,15 @@ use Symfony\Component\Serializer\Serializer;
 
 final readonly class ReportXMLProcessor
 {
+    private const string RFC7489_NAMESPACE = 'http://dmarc.org/dmarc-xml/0.1';
+    private const string RFC9990_NAMESPACE = 'urn:ietf:params:xml:ns:dmarc-2.0';
+
     public function __construct(
         private LoggerInterface $logger,
         #[Autowire(env: 'file:resolve:APP_DMARC_REPORT_XSD_PATH')]
         private string $schemaSource,
+        #[Autowire(env: 'file:resolve:APP_DMARC_RFC9990_REPORT_XSD_PATH')]
+        private string $rfc9990SchemaSource,
     ) {}
 
     public function validate(string $xmlContent): bool
@@ -49,7 +54,7 @@ final readonly class ReportXMLProcessor
 
             if (null === $root->namespaceURI) {
                 $newRoot = $dom->createElementNS(
-                    'http://dmarc.org/dmarc-xml/0.1',
+                    self::RFC7489_NAMESPACE,
                     $root->nodeName
                 );
 
@@ -87,8 +92,22 @@ final readonly class ReportXMLProcessor
                 }
             }
 
-            // 3. Schema validation
-            if (!$dom->schemaValidateSource($this->schemaSource)) {
+            // 3. Put DKIM results before SPF results, as the schema expects.
+            $this->moveDkimBeforeSpf($xpath);
+
+            // RFC 9990 reports declare their own namespace; everything else
+            // is checked against RFC 7489.
+            $isRfc9990 = self::RFC9990_NAMESPACE === $dom->documentElement->namespaceURI;
+
+            // 4. Absorb RFC 7489 habits that the RFC 9990 schema rejects.
+            if ($isRfc9990) {
+                $this->absorbRfc7489Habits($dom, $xpath);
+            }
+
+            // 5. Schema validation
+            $schemaSource = $isRfc9990 ? $this->rfc9990SchemaSource : $this->schemaSource;
+
+            if (!$dom->schemaValidateSource($schemaSource)) {
                 $this->logger->error(
                     'XML schema validation failed.',
                     array_map(
@@ -102,7 +121,7 @@ final readonly class ReportXMLProcessor
                 return false;
             }
 
-            // 4. Validate source_ip values (IPv4 / IPv6)
+            // 6. Validate source_ip values (IPv4 / IPv6)
             if (!$this->validateSourceIps($dom)) {
                 return false;
             }
@@ -141,14 +160,101 @@ final readonly class ReportXMLProcessor
 
             $serializer = new Serializer($normalizers, $encoders);
 
-            return $serializer->deserialize(
-                data: $xmlContent,
+            return $serializer->denormalize(
+                data: $this->withoutAttributes($serializer->decode($xmlContent, 'xml')),
                 type: Feedback::class,
                 format: 'xml',
             );
         } finally {
             unset($entityLoaderSet);
             libxml_set_external_entity_loader($prevEntityLoader);
+        }
+    }
+
+    /**
+     * The XML decoder keeps attributes as "@name" keys and puts the text of
+     * an element with attributes under "#". The DTOs read no attributes, so
+     * drop them. Otherwise an RFC 9990 <extra_contact_info lang="en"> would
+     * decode to an array instead of a string.
+     */
+    private function withoutAttributes(mixed $data): mixed
+    {
+        if (!\is_array($data)) {
+            return $data;
+        }
+
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            if (!\is_string($key) || !str_starts_with($key, '@')) {
+                $result[$key] = $this->withoutAttributes($value);
+            }
+        }
+
+        return ['#'] === array_keys($result) ? $result['#'] : $result;
+    }
+
+    /**
+     * Some reporters write <spf> before <dkim> inside <auth_results>. The
+     * schema wants every <dkim> first, so move them ahead of the first <spf>
+     * and keep their own order. Nothing else is touched, so an <auth_results>
+     * without <spf> or with unknown elements still fails validation.
+     */
+    private function moveDkimBeforeSpf(\DOMXPath $xpath): void
+    {
+        $authResults = $xpath->query('//*[local-name()="auth_results"]') ?: [];
+
+        foreach ($authResults as $authResult) {
+            if (!$authResult instanceof \DOMElement) {
+                continue;
+            }
+
+            $firstSpf = ($xpath->query('*[local-name()="spf"][1]', $authResult) ?: null)?->item(0);
+
+            if (!$firstSpf instanceof \DOMElement) {
+                continue;
+            }
+
+            $lateDkims = $xpath->query(
+                '*[local-name()="spf"][1]/following-sibling::*[local-name()="dkim"]',
+                $authResult
+            ) ?: [];
+
+            foreach ($lateDkims as $dkim) {
+                if ($dkim instanceof \DOMElement) {
+                    $authResult->insertBefore($dkim, $firstSpf);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reporters that move to RFC 9990 may keep RFC 7489 habits: a <pct> in
+     * <policy_published>, or a DKIM result without a <selector>. Drop the
+     * <pct> and give such a DKIM result an empty <selector>, so the report
+     * is not lost. Anything else, such as two <spf> results in one
+     * <auth_results>, still fails validation.
+     */
+    private function absorbRfc7489Habits(\DOMDocument $dom, \DOMXPath $xpath): void
+    {
+        $pcts = $xpath->query(
+            '/*[local-name()="feedback"]/*[local-name()="policy_published"]/*[local-name()="pct"]'
+        ) ?: [];
+
+        foreach ($pcts as $pct) {
+            if ($pct instanceof \DOMElement) {
+                $pct->parentNode?->removeChild($pct);
+            }
+        }
+
+        $dkimsWithoutSelector = $xpath->query(
+            '//*[local-name()="auth_results"]/*[local-name()="dkim"][not(*[local-name()="selector"])]'
+        ) ?: [];
+
+        foreach ($dkimsWithoutSelector as $dkim) {
+            if ($dkim instanceof \DOMElement) {
+                $dkim->appendChild($dom->createElementNS(self::RFC9990_NAMESPACE, 'selector'));
+            }
         }
     }
 

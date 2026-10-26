@@ -9,9 +9,11 @@ use App\Message\Email\InboundEmail;
 use App\Message\Email\ProcessEmail;
 use App\Repository\Email\EmailRepository;
 use App\Service\Email\AggregateReportPostboxResolver;
+use App\Service\Email\ReportAttachmentDecoder;
 use App\Service\User\BlocklistMatcher;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Mime\Address;
 
@@ -23,6 +25,7 @@ final readonly class InboundEmailHandler
         private EmailRepository $emailRepository,
         private MessageBusInterface $messageBus,
         private BlocklistMatcher $blocklistMatcher,
+        private ReportAttachmentDecoder $attachmentDecoder,
         private LoggerInterface $logger,
     ) {}
 
@@ -95,18 +98,29 @@ final readonly class InboundEmailHandler
 
             return;
         }
-        $attachmentBucket = $possibleDmarcAttachment['bucket'] ?? null;
-        $attachmentKey = $possibleDmarcAttachment['key'] ?? null;
+        $attachmentContent = $possibleDmarcAttachment['content'] ?? null;
+        if (!is_string($attachmentContent)) {
+            // Queued before the upgrade, when reports went to object storage
+            // and the message only pointed at them. Failing keeps it in the
+            // failed transport instead of acknowledging it away.
+            throw new UnrecoverableMessageHandlingException('Inbound email carries no report content.');
+        }
         $attachmentFilename = $possibleDmarcAttachment['filename'] ?? null;
         $attachmentContentType = $possibleDmarcAttachment['content_type'] ?? null;
-        if (
-            !is_string($attachmentBucket)
-            || !is_string($attachmentKey)
-            || !is_string($attachmentFilename)
-            || !is_string($attachmentContentType)
-        ) {
+        if (!is_string($attachmentFilename) || !is_string($attachmentContentType)) {
             $this->logger->error('Inbound email attachment payload is invalid.', [
                 'messageId' => $messageId,
+            ]);
+
+            return;
+        }
+
+        try {
+            $xmlContent = $this->attachmentDecoder->decode($attachmentContent);
+        } catch (\InvalidArgumentException $e) {
+            $this->logger->error('Inbound email attachment could not be decoded.', [
+                'messageId' => $messageId,
+                'error' => $e->getMessage(),
             ]);
 
             return;
@@ -126,10 +140,9 @@ final readonly class InboundEmailHandler
             ->setFromAddress($fromAddress)
             ->setToAddress($toAddress)
             ->setMessageId($messageId)
-            ->setAttachmentBucket($attachmentBucket)
-            ->setAttachmentKey($attachmentKey)
             ->setAttachmentFilename($attachmentFilename)
             ->setAttachmentContentType($attachmentContentType)
+            ->setAttachmentContent($xmlContent)
             ->setOwner($user)
         ;
 

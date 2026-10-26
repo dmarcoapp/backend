@@ -16,7 +16,6 @@ use App\Repository\DMARC\ReportRepository;
 use App\Repository\Email\EmailRepository;
 use App\Service\DMARC\ReportXMLProcessor;
 use App\Tests\Api\ApiIntegrationTestCase;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -36,7 +35,6 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $handler = $this->createHandler(
             self::getContainer()->get(EmailRepository::class),
             $this->createStub(MessageBusInterface::class),
-            $this->createStub(AwsS3V3Adapter::class),
             $this->createStub(LoggerInterface::class),
         );
 
@@ -51,15 +49,11 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $domainRepository = self::getContainer()->get(DomainRepository::class);
         $reportRepository = self::getContainer()->get(ReportRepository::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
-        $storage = $this->createStub(AwsS3V3Adapter::class);
 
         $user = $this->createAccount('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $email = $this->createEmail($user, 'report.xml');
-        $emailRepository->save($email);
-
         $xmlContent = $this->validXml();
-        $storage->method('fileExists')->with($email->getAttachmentKey())->willReturn(true);
-        $storage->method('read')->with($email->getAttachmentKey())->willReturn($xmlContent);
+        $email = $this->createEmail($user, 'report.xml', $xmlContent);
+        $emailRepository->save($email);
 
         $messageBus
             ->expects(self::once())
@@ -73,7 +67,6 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $handler = $this->createHandler(
             $emailRepository,
             $messageBus,
-            $storage,
             $this->createStub(LoggerInterface::class),
         );
 
@@ -82,6 +75,10 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $report = $reportRepository->findOneBy(['email' => $email]);
         self::assertNotNull($report);
         self::assertSame($xmlContent, $report->getRawXML());
+
+        // The report holds the XML now, so the email does not keep a second copy.
+        $this->entityManager->refresh($email);
+        self::assertNull($email->getAttachmentContent());
 
         $domain = $domainRepository->findOneBy([
             'domain' => 'example.com',
@@ -95,10 +92,10 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $emailRepository = self::getContainer()->get(EmailRepository::class);
         $reportRepository = self::getContainer()->get(ReportRepository::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
-        $storage = $this->createStub(AwsS3V3Adapter::class);
 
         $user = $this->createAccount('owner-existing-report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $email = $this->createEmail($user, 'report.xml');
+        $xmlContent = $this->validXml('198.51.100.10');
+        $email = $this->createEmail($user, 'report.xml', $xmlContent);
         $emailRepository->save($email);
 
         $existingReport = new Report();
@@ -108,10 +105,6 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         ;
         $this->entityManager->persist($existingReport);
         $this->entityManager->flush();
-
-        $xmlContent = $this->validXml('198.51.100.10');
-        $storage->method('fileExists')->with($email->getAttachmentKey())->willReturn(true);
-        $storage->method('read')->with($email->getAttachmentKey())->willReturn($xmlContent);
 
         $messageBus
             ->expects(self::once())
@@ -123,7 +116,6 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $handler = $this->createHandler(
             $emailRepository,
             $messageBus,
-            $storage,
             $this->createStub(LoggerInterface::class),
         );
 
@@ -131,6 +123,42 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
 
         $this->entityManager->refresh($existingReport);
         self::assertSame($xmlContent, $existingReport->getRawXML());
+    }
+
+    public function testInvokeHandsOnAReportAnEarlierRunAlreadyStored(): void
+    {
+        $emailRepository = self::getContainer()->get(EmailRepository::class);
+        $messageBus = $this->createMock(MessageBusInterface::class);
+
+        // What a redelivery finds when the first run stored the report, and so
+        // cleared the email, but failed before it dispatched ProcessReport.
+        $user = $this->createAccount('owner-redelivered-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $email = $this->createEmail($user, 'report.xml');
+        $emailRepository->save($email);
+
+        $report = new Report();
+        $report
+            ->setEmail($email)
+            ->setRawXML($this->validXml())
+        ;
+        $this->entityManager->persist($report);
+        $this->entityManager->flush();
+        $this->entityManager->refresh($email);
+
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::callback(static fn (ProcessReport $message): bool => $message->reportId === $report->getId()?->toRfc4122()))
+            ->willReturnCallback(static fn (ProcessReport $message): Envelope => new Envelope($message))
+        ;
+
+        $handler = $this->createHandler(
+            $emailRepository,
+            $messageBus,
+            $this->createStub(LoggerInterface::class),
+        );
+
+        $handler(new ProcessEmail($email->getId()->toRfc4122()));
     }
 
     public function testInvokeLogsWhenExtensionUnsupported(): void
@@ -156,7 +184,6 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $handler = $this->createHandler(
             $emailRepository,
             $messageBus,
-            $this->createStub(AwsS3V3Adapter::class),
             $logger,
         );
 
@@ -166,22 +193,20 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
     private function createHandler(
         EmailRepository $emailRepository,
         MessageBusInterface $messageBus,
-        AwsS3V3Adapter $storage,
         LoggerInterface $logger,
     ): ProcessEmailHandler {
         return new ProcessEmailHandler(
             $emailRepository,
             self::getContainer()->get(DomainRepository::class),
             self::getContainer()->get(ReportRepository::class),
-            new ReportXMLProcessor(new NullLogger(), $this->schemaSource()),
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
             $this->entityManager,
             $messageBus,
-            $storage,
             $logger,
         );
     }
 
-    private function createEmail(User $user, string $filename): Email
+    private function createEmail(User $user, string $filename, ?string $content = null): Email
     {
         $email = new Email();
         $email
@@ -189,10 +214,9 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
             ->setFromAddress('sender@example.com')
             ->setToAddress('recipient@example.com')
             ->setMessageId('<message@example.com>')
-            ->setAttachmentBucket('bucket')
-            ->setAttachmentKey('path/report.xml')
             ->setAttachmentFilename($filename)
             ->setAttachmentContentType('application/xml')
+            ->setAttachmentContent($content)
             ->setOwner($user)
         ;
 
@@ -202,6 +226,13 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
     private function schemaSource(): string
     {
         $path = \dirname(__DIR__, 3).'/config/dmarc/rua.xsd';
+
+        return (string) file_get_contents($path);
+    }
+
+    private function rfc9990SchemaSource(): string
+    {
+        $path = \dirname(__DIR__, 3).'/config/dmarc/rfc9990.xsd';
 
         return (string) file_get_contents($path);
     }

@@ -38,12 +38,6 @@
         <env name="MESSENGER_ASYNC_HIGH_TRANSPORT_DSN" value="sync://"/>
         <env name="LOCK_DSN" value="flock"/>
         <env name="CORS_ALLOW_ORIGIN" value="^https?://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$"/>
-        <env name="S3_ENDPOINT" value="http://minio:9000"/>
-        <env name="S3_REGION" value="us-east-1"/>
-        <env name="S3_ACCESS_KEY" value="minioadmin"/>
-        <env name="S3_SECRET_KEY" value="minioadmin"/>
-        <env name="S3_BUCKET" value="mail"/>
-        <env name="S3_FORCE_PATH_STYLE" value="true"/>
         <env name="REDIS_DSN" value="redis://redis"/>
         <env name="SYMFONY_DEPRECATIONS_HELPER" value="disabled"/>
         <server name="APP_ENV" value="test"/>
@@ -63,12 +57,6 @@
         <server name="MESSENGER_ASYNC_HIGH_TRANSPORT_DSN" value="sync://"/>
         <server name="LOCK_DSN" value="flock"/>
         <server name="CORS_ALLOW_ORIGIN" value="^https?://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$"/>
-        <server name="S3_ENDPOINT" value="http://minio:9000"/>
-        <server name="S3_REGION" value="us-east-1"/>
-        <server name="S3_ACCESS_KEY" value="minioadmin"/>
-        <server name="S3_SECRET_KEY" value="minioadmin"/>
-        <server name="S3_BUCKET" value="mail"/>
-        <server name="S3_FORCE_PATH_STYLE" value="true"/>
         <server name="REDIS_DSN" value="redis://redis"/>
         <server name="SYMFONY_DEPRECATIONS_HELPER" value="disabled"/>
         <ini name="display_errors" value="1"/>

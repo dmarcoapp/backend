@@ -17,9 +17,7 @@ use App\Repository\Email\EmailRepository;
 use App\Service\DMARC\ReportXMLProcessor;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -39,8 +37,6 @@ final readonly class ProcessEmailHandler
         private ReportXMLProcessor $reportXMLProcessor,
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
-        #[Autowire(service: 'flysystem.adapter.mail_attachments.storage.s3')]
-        private AwsS3V3Adapter $remoteMailAttachmentsStorage,
         private LoggerInterface $logger,
     ) {}
 
@@ -61,10 +57,6 @@ final readonly class ProcessEmailHandler
         if (null === $attachmentFilename) {
             throw new UnrecoverableMessageHandlingException('Email attachment filename is missing.');
         }
-        $attachmentKey = $email->getAttachmentKey();
-        if (null === $attachmentKey) {
-            throw new UnrecoverableMessageHandlingException('Email attachment key is missing.');
-        }
 
         $extension = new ByteString($attachmentFilename)->afterLast('.')->toString();
         if (!in_array($extension, self::SUPPORTED_EXTENSIONS, true)) {
@@ -81,13 +73,21 @@ final readonly class ProcessEmailHandler
             throw new \LogicException('Email owner is missing.');
         }
 
-        if (!$this->remoteMailAttachmentsStorage->fileExists($attachmentKey)) {
-            throw new UnrecoverableMessageHandlingException('Email attachment not found.');
+        $xmlContent = $email->getAttachmentContent();
+        if (null === $xmlContent) {
+            // The report took the XML over in an earlier run, which then failed
+            // before it handed the report on. Handing it on is all that is left.
+            $report = $email->getReport();
+            $reportId = $report?->getId();
+            if (null === $reportId || null === $report?->getRawXML()) {
+                throw new UnrecoverableMessageHandlingException('Email attachment content is missing.');
+            }
+            $this->messageBus->dispatch(new ProcessReport(reportId: $reportId->toRfc4122()));
+
+            return;
         }
 
-        $xmlContent = $this->remoteMailAttachmentsStorage->read($attachmentKey);
-
-        if (empty($xmlContent)) {
+        if ('' === $xmlContent) {
             $this->logger->error('Empty XML content.', [
                 'emailId' => $emailId->toRfc4122(),
             ]);
@@ -155,6 +155,8 @@ final readonly class ProcessEmailHandler
         }
 
         $report->setRawXML($xmlContent);
+        // The report holds the XML from here on, so the email lets go of its copy.
+        $email->setAttachmentContent(null);
 
         $this->entityManager->flush();
 

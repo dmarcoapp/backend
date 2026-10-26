@@ -17,7 +17,7 @@ final class ReportXMLProcessorTest extends TestCase
 {
     public function testValidateRejectsInvalidXml(): void
     {
-        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath());
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
 
         self::assertFalse($processor->validate('<not-xml'));
     }
@@ -25,7 +25,7 @@ final class ReportXMLProcessorTest extends TestCase
     public function testValidateAcceptsValidXml(): void
     {
         $logger = new TestLogger();
-        $processor = new ReportXMLProcessor($logger, $this->schemaPath());
+        $processor = new ReportXMLProcessor($logger, $this->schemaPath(), $this->rfc9990SchemaPath());
 
         $result = $processor->validate($this->validXml());
 
@@ -38,28 +38,28 @@ final class ReportXMLProcessorTest extends TestCase
 
     public function testValidateRejectsInvalidSourceIp(): void
     {
-        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath());
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
 
         self::assertFalse($processor->validate($this->validXml('999.999.999.999')));
     }
 
     public function testValidateAcceptsIpv6(): void
     {
-        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath());
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
 
         self::assertTrue($processor->validate($this->validXml('2001:db8::1')));
     }
 
     public function testValidateStripsVendorSpecificElements(): void
     {
-        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath());
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
 
         self::assertTrue($processor->validate($this->validXmlWithExtras()));
     }
 
     public function testDeserializeReturnsFeedback(): void
     {
-        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath());
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
 
         $feedback = $processor->deserialize($this->validXml());
 
@@ -71,6 +71,13 @@ final class ReportXMLProcessorTest extends TestCase
     private function schemaPath(): string
     {
         $path = \dirname(__DIR__, 2).'/config/dmarc/rua.xsd';
+
+        return (string) file_get_contents($path);
+    }
+
+    private function rfc9990SchemaPath(): string
+    {
+        $path = \dirname(__DIR__, 2).'/config/dmarc/rfc9990.xsd';
 
         return (string) file_get_contents($path);
     }

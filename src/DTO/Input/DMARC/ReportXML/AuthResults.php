@@ -12,7 +12,7 @@ final readonly class AuthResults
      */
     public function __construct(
         private ?array $dkim,
-        private array $spf,
+        private array $spf = [],
     ) {}
 
     /** @return null|Dkim[] */

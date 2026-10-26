@@ -28,7 +28,7 @@ This is the part of DMARCo that turns report email into data you can query: a
 Symfony API, the workers behind it, the database model, the schedulers, and the
 report processing pipeline.
 
-Reports reach it as a signed webhook plus a file in S3-compatible storage.
+Reports reach it as a signed webhook that carries the report itself.
 [`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound) does that
 job, and so does any gateway you build against the webhook contract documented
 below.
@@ -38,8 +38,7 @@ below.
 ```text
 DMARC report email
   -> inbound mail gateway
-  -> S3-compatible attachment storage
-  -> signed webhook
+  -> signed webhook with the report XML
   -> DMARCo Backend
   -> RabbitMQ workers
   -> PostgreSQL
@@ -55,14 +54,11 @@ Services in the Docker stack:
 - `rabbitmq`: async queue
 - `redis`: cache backend
 
-The stack expects S3-compatible object storage for inbound report attachments.
-That can be AWS S3, MinIO, or another compatible service.
-
 ## Features
 
-- Signed inbound webhook for DMARC report email metadata
-- S3-compatible attachment retrieval
-- DMARC aggregate XML validated against `config/dmarc/rua.xsd`
+- Signed inbound webhook for DMARC report emails, carrying the report XML
+- DMARC aggregate XML validated against `config/dmarc/rua.xsd` (RFC 7489),
+  or `config/dmarc/rfc9990.xsd` when the root is in the RFC 9990 namespace
 - Async processing of reports, report records, domains, and source IP data
 - REST API under `/v1`, with OpenAPI documentation at `/v1/doc`
 - One operator account, created from the command line, with login, refresh
@@ -74,7 +70,6 @@ That can be AWS S3, MinIO, or another compatible service.
 ## Requirements
 
 - Docker and Docker Compose v2
-- S3-compatible bucket for inbound report attachments
 - Optional: an SMTP provider, for notification emails
 - Optional: an inbound mail gateway such as
   [dmarcoapp/mail-inbound](https://github.com/dmarcoapp/mail-inbound)
@@ -141,9 +136,6 @@ Important settings:
 | `REDIS_DSN` | Redis cache provider |
 | `LOCK_DSN` | Symfony Lock backend |
 | `JWT_SECRET_KEY` / `JWT_PUBLIC_KEY` / `JWT_PASSPHRASE` | JWT signing key configuration |
-| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3-compatible storage target |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | S3 credentials |
-| `S3_FORCE_PATH_STYLE` | Enables path-style S3 URLs, which MinIO needs |
 
 ## Inbound report webhook
 
@@ -175,11 +167,9 @@ Example payload:
   "message_id": "<report-20260603@example.net>",
   "attachments": [
     {
-      "id": "4f7c3ef4-5f9c-41fb-a61a-1d6c75f8f0b7",
-      "bucket": "mail",
-      "key": "attachments/4f7c3ef4-5f9c-41fb-a61a-1d6c75f8f0b7",
       "filename": "example.net!example.com!1717372800!1717459199.xml",
-      "content_type": "application/xml"
+      "content_type": "application/xml",
+      "content": "H4sIAAAAAAAAA7Ox..."
     }
   ]
 }
@@ -190,7 +180,9 @@ Message handling:
 - The webhook verifies the HMAC signature before dispatching work.
 - The first recipient address is matched to a user by its local part.
 - User blocklist rules can reject reports by sender address.
-- The first attachment is loaded from S3-compatible storage.
+- The first attachment carries the report XML in `content`, gzip-compressed and
+  base64-encoded, at most 8 MB once unpacked. One that cannot be unpacked gets
+  `422`, so the sender keeps it.
 - The backend currently processes normalized `.xml` report attachments.
 - The XML is validated against the DMARC aggregate report schema before it is
   stored and processed.
@@ -233,11 +225,6 @@ APP_EMAIL_SENDER_ADDRESS='no-reply@example.com' \
 APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN='aggregate-reports.example.com' \
 APP_FRONTEND_URL='https://dash.example.com' \
 CORS_ALLOW_ORIGIN='^https://dash\.example\.com$' \
-S3_ENDPOINT='https://s3.example.com' \
-S3_REGION='us-east-1' \
-S3_ACCESS_KEY='<s3 access key>' \
-S3_SECRET_KEY='<s3 secret key>' \
-S3_BUCKET='mail' \
 docker compose -f compose.yaml -f compose.prod.yaml up -d --wait
 ```
 
@@ -251,8 +238,7 @@ Before exposing the service:
 
 - Replace all default secrets and credentials.
 - Generate deployment-specific JWT keys.
-- Configure PostgreSQL, RabbitMQ, Redis, and S3 storage for durable production
-  use.
+- Configure PostgreSQL, RabbitMQ, and Redis for durable production use.
 - Configure `MAILER_DSN` and `APP_EMAIL_SENDER_ADDRESS` if you want
   notification emails.
 - Restrict `CORS_ALLOW_ORIGIN` to trusted frontend origins.
@@ -301,9 +287,8 @@ docker compose exec php bash -lc "bin/console make:migration"
 - `compose.prod.yaml`: production image build overrides
 - `.env`: committed defaults
 - `.env.local`: uncommitted local overrides
-- `config/dmarc/rua.xsd`: DMARC aggregate report XML schema
-- `config/packages/flysystem.yaml`: S3-compatible attachment storage
-  configuration
+- `config/dmarc/rua.xsd`: RFC 7489 DMARC aggregate report XML schema
+- `config/dmarc/rfc9990.xsd`: RFC 9990 DMARC aggregate report XML schema
 - `config/packages/messenger.yaml`: async queue configuration
 - `frankenphp/Caddyfile`: FrankenPHP/Caddy server configuration
 

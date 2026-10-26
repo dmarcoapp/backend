@@ -9,7 +9,9 @@ use App\Message\Email\InboundEmail;
 use App\Repository\User\UserRepository;
 use App\Service\Email\AggregateReportPostboxResolver;
 use App\Service\Email\InboundReportEmailWebhookSignatureVerifier;
+use App\Service\Email\ReportAttachmentDecoder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -134,8 +136,7 @@ final class WebhookEndpointTest extends ApiTestCase
         $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
-        // A 404 is what tells the sender to drop the attachment it uploaded,
-        // so nothing accumulates in the bucket for addresses nobody owns.
+        // A 404 tells the sender to discard the message instead of trying again.
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus->expects(self::never())->method('dispatch');
 
@@ -156,6 +157,51 @@ final class WebhookEndpointTest extends ApiTestCase
         self::assertSame(404, $response->getStatusCode());
     }
 
+    public function testWebhookRefusesContentItCannotUnpack(): void
+    {
+        $payload = $this->validWebhookPayload();
+        $payload['attachments'][0]['content'] = base64_encode('not gzip');
+
+        self::assertSame(422, $this->postSignedWithKnownRecipient($payload)->getStatusCode());
+    }
+
+    public function testWebhookRefusesAReportOverTheSizeLimit(): void
+    {
+        $payload = $this->validWebhookPayload();
+        $payload['attachments'][0]['content'] = base64_encode(
+            (string) gzencode(str_repeat('a', ReportAttachmentDecoder::MAX_XML_BYTES + 1))
+        );
+
+        self::assertSame(422, $this->postSignedWithKnownRecipient($payload)->getStatusCode());
+    }
+
+    private function postSignedWithKnownRecipient(array $payload): Response
+    {
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $timestamp = (string) time();
+        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+        // The report is refused while the sender still holds it, so nothing is
+        // queued for a worker that could only fail on it.
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $messageBus->expects(self::never())->method('dispatch');
+
+        return $this->requestJson(
+            method: 'POST',
+            uri: '/v1/webhook/inbound_report_email',
+            payload: $payload,
+            headers: [
+                'x-timestamp' => $timestamp,
+                'x-signature' => 'sha256='.$signature,
+            ],
+            configureContainer: function (ContainerInterface $container) use ($messageBus): void {
+                $container->set(MessageBusInterface::class, $messageBus);
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(new User()));
+            },
+        );
+    }
+
     private function resolverReturning(?User $user): AggregateReportPostboxResolver
     {
         $userRepository = $this->createStub(UserRepository::class);
@@ -174,11 +220,9 @@ final class WebhookEndpointTest extends ApiTestCase
             'message_id' => '<message@example.com>',
             'attachments' => [
                 [
-                    'id' => '11111111-1111-4111-8111-111111111111',
-                    'bucket' => 'bucket',
-                    'key' => 'path/report.xml',
                     'filename' => 'report.xml',
                     'content_type' => 'application/xml',
+                    'content' => base64_encode((string) gzencode('<?xml version="1.0"?><feedback/>')),
                 ],
             ],
         ];

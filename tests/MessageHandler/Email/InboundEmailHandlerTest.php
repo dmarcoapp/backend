@@ -15,11 +15,13 @@ use App\Repository\Email\EmailRepository;
 use App\Repository\User\BlocklistEntryRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Email\AggregateReportPostboxResolver;
+use App\Service\Email\ReportAttachmentDecoder;
 use App\Service\User\BlocklistMatcher;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Envelope;
+use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Uid\Uuid;
 
@@ -29,6 +31,8 @@ use Symfony\Component\Uid\Uuid;
 #[CoversClass(InboundEmailHandler::class)]
 final class InboundEmailHandlerTest extends TestCase
 {
+    private const string REPORT_XML = '<?xml version="1.0"?><feedback/>';
+
     public function testInvokeLogsWhenEmailAlreadyHandled(): void
     {
         $userRepository = $this->createStub(UserRepository::class);
@@ -49,7 +53,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -77,7 +81,8 @@ final class InboundEmailHandlerTest extends TestCase
             ->with(self::callback(function (Email $email) use ($savedEmailId): bool {
                 $this->setEntityId($email, $savedEmailId);
 
-                return $email->getOwner() instanceof User;
+                return $email->getOwner() instanceof User
+                    && self::REPORT_XML === $email->getAttachmentContent();
             }))
         ;
 
@@ -90,7 +95,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -132,7 +137,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler(
             $this->createInboundEmailMessage(from: '"DMARC Aggregate Report" <dmarcreport@microsoft.com>')
@@ -160,7 +165,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -191,9 +196,70 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler($this->createInboundEmailMessage(attachments: []));
+    }
+
+    public function testInvokeKeepsAMessageQueuedBeforeTheUpgrade(): void
+    {
+        $userRepository = $this->createStub(UserRepository::class);
+        $emailRepository = $this->createMock(EmailRepository::class);
+        $messageBus = $this->createMock(MessageBusInterface::class);
+
+        $user = new User();
+        $user->setEmail('owner@example.com');
+        $user->setName('Owner');
+        $user->setSharedPostboxIdentifierToken('shared-token');
+
+        $userRepository->method('findOneBy')->willReturn($user);
+        $emailRepository->method('findOneBy')->willReturn(null);
+        $emailRepository->expects(self::never())->method('save');
+        $messageBus->expects(self::never())->method('dispatch');
+
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $this->createBlocklistMatcher(), new ReportAttachmentDecoder(), $this->createStub(LoggerInterface::class));
+
+        // Failing, rather than returning, is what keeps it in the failed transport.
+        $this->expectException(UnrecoverableMessageHandlingException::class);
+
+        $handler($this->createInboundEmailMessage(attachments: [[
+            'id' => '4f7c3ef4-5f9c-41fb-a61a-1d6c75f8f0b7',
+            'bucket' => 'mail',
+            'key' => 'attachments/4f7c3ef4-5f9c-41fb-a61a-1d6c75f8f0b7',
+            'filename' => 'report.xml',
+            'content_type' => 'application/xml',
+        ]]));
+    }
+
+    public function testInvokeStopsWhenAttachmentCannotBeDecoded(): void
+    {
+        $userRepository = $this->createStub(UserRepository::class);
+        $emailRepository = $this->createMock(EmailRepository::class);
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $logger = $this->createMock(LoggerInterface::class);
+
+        $user = new User();
+        $user->setEmail('owner@example.com');
+        $user->setName('Owner');
+        $user->setSharedPostboxIdentifierToken('shared-token');
+
+        $userRepository->method('findOneBy')->willReturn($user);
+        $emailRepository->method('findOneBy')->willReturn(null);
+        $emailRepository->expects(self::never())->method('save');
+        $messageBus->expects(self::never())->method('dispatch');
+        $logger
+            ->expects(self::once())
+            ->method('error')
+            ->with('Inbound email attachment could not be decoded.', self::arrayHasKey('error'))
+        ;
+
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $this->createBlocklistMatcher(), new ReportAttachmentDecoder(), $logger);
+
+        $handler($this->createInboundEmailMessage(attachments: [[
+            'filename' => 'report.xml',
+            'content_type' => 'application/xml',
+            'content' => 'not base64!',
+        ]]));
     }
 
     public function testInvokeStopsWhenSenderBlocked(): void
@@ -224,7 +290,7 @@ final class InboundEmailHandlerTest extends TestCase
             )
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
 
         $handler($this->createInboundEmailMessage());
     }
@@ -262,7 +328,7 @@ final class InboundEmailHandlerTest extends TestCase
             ->willReturnCallback(static fn (ProcessEmail $message): Envelope => new Envelope($message))
         ;
 
-        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, $logger);
+        $handler = new InboundEmailHandler(new AggregateReportPostboxResolver($userRepository), $emailRepository, $messageBus, $blocklistMatcher, new ReportAttachmentDecoder(), $logger);
         $handler($this->createInboundEmailMessage(from: '  invalid-from-address  '));
     }
 
@@ -270,11 +336,9 @@ final class InboundEmailHandlerTest extends TestCase
     {
         $attachments ??= [
             [
-                'id' => Uuid::v4()->toRfc4122(),
-                'bucket' => 'bucket',
-                'key' => 'path/report.xml',
                 'filename' => 'report.xml',
                 'content_type' => 'application/xml',
+                'content' => base64_encode((string) gzencode(self::REPORT_XML)),
             ],
         ];
 
