@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Email;
 
-use App\Entity\User\User;
-use App\Repository\User\UserRepository;
+use App\Entity\Platform\PlatformSettings;
 use App\Service\Email\AggregateReportPostboxResolver;
+use App\Tests\Support\PlatformSettingsTestFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -17,51 +17,30 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(AggregateReportPostboxResolver::class)]
 final class AggregateReportPostboxResolverTest extends TestCase
 {
-    public function testLooksTheOwnerUpByTheLocalPart(): void
+    public function testRecognizesTheTokenInTheLocalPart(): void
     {
-        $user = new User();
+        self::assertTrue($this->resolver()->isReportAddress('sharedtoken123@aggregate-reports.example.test'));
+    }
 
-        $userRepository = $this->createMock(UserRepository::class);
-        $userRepository
-            ->expects(self::once())
-            ->method('findOneBy')
-            ->with(['sharedPostboxIdentifierToken' => 'sharedtoken123'])
-            ->willReturn($user)
-        ;
-
-        $resolver = new AggregateReportPostboxResolver($userRepository);
-
-        self::assertSame($user, $resolver->resolveUser('sharedtoken123@aggregate-reports.example.test'));
+    public function testTheDomainPartDoesNotMatter(): void
+    {
+        self::assertTrue($this->resolver()->isReportAddress('sharedtoken123@another.example'));
     }
 
     public function testTrimsSurroundingWhitespace(): void
     {
-        $userRepository = $this->createMock(UserRepository::class);
-        $userRepository
-            ->expects(self::once())
-            ->method('findOneBy')
-            ->with(['sharedPostboxIdentifierToken' => 'sharedtoken123'])
-            ->willReturn(null)
-        ;
+        self::assertTrue($this->resolver()->isReportAddress("  sharedtoken123@aggregate-reports.example.test\n"));
+    }
 
-        $resolver = new AggregateReportPostboxResolver($userRepository);
-
-        self::assertNull($resolver->resolveUser("  sharedtoken123@aggregate-reports.example.test\n"));
+    public function testAnotherLocalPartIsNotTheReportAddress(): void
+    {
+        self::assertFalse($this->resolver()->isReportAddress('someone@aggregate-reports.example.test'));
+        self::assertFalse($this->resolver()->isReportAddress('sharedtoken123x@aggregate-reports.example.test'));
     }
 
     public function testStopsAtTheFirstAtSign(): void
     {
-        $userRepository = $this->createMock(UserRepository::class);
-        $userRepository
-            ->expects(self::once())
-            ->method('findOneBy')
-            ->with(['sharedPostboxIdentifierToken' => 'sharedtoken123'])
-            ->willReturn(null)
-        ;
-
-        $resolver = new AggregateReportPostboxResolver($userRepository);
-
-        self::assertNull($resolver->resolveUser('sharedtoken123@host@aggregate-reports.example.test'));
+        self::assertTrue($this->resolver()->isReportAddress('sharedtoken123@host@aggregate-reports.example.test'));
     }
 
     /**
@@ -77,13 +56,13 @@ final class AggregateReportPostboxResolverTest extends TestCase
     }
 
     #[DataProvider('unusableAddressProvider')]
-    public function testAnAddressWithoutAnIdentifierIsNotLookedUp(string $address): void
+    public function testAnAddressWithoutAnIdentifierIsNotTheReportAddress(string $address): void
     {
-        $userRepository = $this->createMock(UserRepository::class);
-        $userRepository->expects(self::never())->method('findOneBy');
+        self::assertFalse($this->resolver()->isReportAddress($address));
+    }
 
-        $resolver = new AggregateReportPostboxResolver($userRepository);
-
-        self::assertNull($resolver->resolveUser($address));
+    private function resolver(): AggregateReportPostboxResolver
+    {
+        return new AggregateReportPostboxResolver(PlatformSettingsTestFactory::provider(new PlatformSettings('sharedtoken123')));
     }
 }

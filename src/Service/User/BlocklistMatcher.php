@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\User;
 
-use App\Entity\User\User;
 use App\Repository\User\BlocklistEntryRepository;
 
 final readonly class BlocklistMatcher
@@ -13,14 +12,14 @@ final readonly class BlocklistMatcher
         private BlocklistEntryRepository $blocklistEntryRepository,
     ) {}
 
-    public function isBlocked(User $user, string $fromAddress): bool
+    public function isBlocked(string $fromAddress): bool
     {
         $normalizedAddress = self::normalizeValue($fromAddress);
         if ('' === $normalizedAddress) {
             return false;
         }
 
-        foreach ($this->blocklistEntryRepository->getBlocklistEntriesForUser($user) as $entry) {
+        foreach ($this->blocklistEntryRepository->getBlocklistEntries() as $entry) {
             $normalizedPattern = self::normalizeValue($entry->getPattern());
             if ('' === $normalizedPattern) {
                 continue;

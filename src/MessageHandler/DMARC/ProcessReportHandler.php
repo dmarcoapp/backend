@@ -61,6 +61,25 @@ final readonly class ProcessReportHandler
 
         $reportMetadataDTO = $feedbackDTO->getReportMetadata();
         $policyPublishedDTO = $feedbackDTO->getPolicyPublished();
+
+        // A copy stored by an earlier version, before copies were recognized
+        // on arrival, waits here alongside the report it repeats.
+        $copyOf = $this->reportRepository->findOneBy([
+            'beginDate' => \DateTimeImmutable::createFromFormat('U', (string) $reportMetadataDTO->getDateRange()->getBegin()),
+            'domain' => $policyPublishedDTO->getDomain(),
+            'reportId' => $reportMetadataDTO->getReportId(),
+            'reportingOrganization' => $reportMetadataDTO->getOrgName(),
+        ]);
+        if (null !== $copyOf && $copyOf !== $report) {
+            $this->logger->info('Report already received, dropping the copy.', [
+                'reportId' => $copyOf->getId()?->toRfc4122(),
+            ]);
+            $this->entityManager->remove($report->getEmail() ?? $report);
+            $this->entityManager->flush();
+
+            return;
+        }
+
         $adkimPolicy = $policyPublishedDTO->getAdkim();
         $aspfPolicy = $policyPublishedDTO->getAspf();
         $pPolicy = $policyPublishedDTO->getP() ?? DispositionType::UNKNOWN->value;

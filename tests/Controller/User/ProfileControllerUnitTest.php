@@ -8,11 +8,9 @@ use App\Controller\User\ProfileController;
 use App\DTO\Input\User\Profile;
 use App\Entity\User\User;
 use App\Repository\User\UserRepository;
-use App\Service\User\UserDeleteProcessor;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Uid\Uuid;
@@ -35,10 +33,6 @@ final class ProfileControllerUnitTest extends TestCase
             $this->createStub(UserPasswordHasherInterface::class),
             $this->createStub(EventDispatcherInterface::class),
             $this->createStub(MicroMapperInterface::class),
-            new UserDeleteProcessor(
-                $this->createStub(UserRepository::class),
-                $this->createStub(LoggerInterface::class),
-            ),
         );
 
         $user = new User();

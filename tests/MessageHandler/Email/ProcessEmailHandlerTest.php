@@ -7,7 +7,6 @@ namespace App\Tests\MessageHandler\Email;
 use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Message\DMARC\ProcessReport;
 use App\Message\Email\ProcessEmail;
 use App\MessageHandler\Email\ProcessEmailHandler;
@@ -30,6 +29,13 @@ use Symfony\Component\Uid\Uuid;
 #[CoversClass(ProcessEmailHandler::class)]
 final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->removeReportData();
+    }
+
     public function testInvokeThrowsWhenEmailMissing(): void
     {
         $handler = $this->createHandler(
@@ -50,9 +56,8 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $reportRepository = self::getContainer()->get(ReportRepository::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
 
-        $user = $this->createAccount('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $xmlContent = $this->validXml();
-        $email = $this->createEmail($user, 'report.xml', $xmlContent);
+        $email = $this->createEmail('report.xml', $xmlContent);
         $emailRepository->save($email);
 
         $messageBus
@@ -80,10 +85,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $this->entityManager->refresh($email);
         self::assertNull($email->getAttachmentContent());
 
-        $domain = $domainRepository->findOneBy([
-            'domain' => 'example.com',
-            'user' => $user,
-        ]);
+        $domain = $domainRepository->findOneBy(['domain' => 'example.com']);
         self::assertInstanceOf(Domain::class, $domain);
     }
 
@@ -93,9 +95,8 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $reportRepository = self::getContainer()->get(ReportRepository::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
 
-        $user = $this->createAccount('owner-existing-report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $xmlContent = $this->validXml('198.51.100.10');
-        $email = $this->createEmail($user, 'report.xml', $xmlContent);
+        $email = $this->createEmail('report.xml', $xmlContent);
         $emailRepository->save($email);
 
         $existingReport = new Report();
@@ -132,8 +133,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
 
         // What a redelivery finds when the first run stored the report, and so
         // cleared the email, but failed before it dispatched ProcessReport.
-        $user = $this->createAccount('owner-redelivered-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $email = $this->createEmail($user, 'report.xml');
+        $email = $this->createEmail('report.xml');
         $emailRepository->save($email);
 
         $report = new Report();
@@ -161,14 +161,49 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         $handler(new ProcessEmail($email->getId()->toRfc4122()));
     }
 
+    public function testInvokeDropsACopyOfAReportAlreadyReceived(): void
+    {
+        $emailRepository = self::getContainer()->get(EmailRepository::class);
+        $reportRepository = self::getContainer()->get(ReportRepository::class);
+        $messageBus = $this->createMock(MessageBusInterface::class);
+
+        // A domain that lists two report addresses gets each report twice.
+        $first = $this->createEmail('report.xml', $this->validXml(), 'first@example.com');
+        $copy = $this->createEmail('report.xml', $this->validXml(), 'second@example.com');
+        $emailRepository->save($first);
+        $emailRepository->save($copy);
+        $copyId = $copy->getId();
+        self::assertNotNull($copyId);
+
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(ProcessReport::class))
+            ->willReturnCallback(static fn (ProcessReport $message): Envelope => new Envelope($message))
+        ;
+
+        $handler = $this->createHandler(
+            $emailRepository,
+            $messageBus,
+            $this->createStub(LoggerInterface::class),
+        );
+
+        $handler(new ProcessEmail($first->getId()->toRfc4122()));
+        $handler(new ProcessEmail($copyId->toRfc4122()));
+
+        $this->entityManager->clear();
+        self::assertCount(1, $reportRepository->findAll());
+        self::assertNull($emailRepository->find($copyId));
+        self::assertNotNull($emailRepository->find($first->getId()));
+    }
+
     public function testInvokeLogsWhenExtensionUnsupported(): void
     {
         $emailRepository = self::getContainer()->get(EmailRepository::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
         $logger = $this->createMock(LoggerInterface::class);
 
-        $user = $this->createAccount('owner-unsupported-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $email = $this->createEmail($user, 'report.zip');
+        $email = $this->createEmail('report.zip');
         $emailRepository->save($email);
 
         $messageBus->expects(self::never())->method('dispatch');
@@ -206,18 +241,17 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         );
     }
 
-    private function createEmail(User $user, string $filename, ?string $content = null): Email
+    private function createEmail(string $filename, ?string $content = null, string $toAddress = 'recipient@example.com'): Email
     {
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable('2024-01-01 10:00:00'))
             ->setFromAddress('sender@example.com')
-            ->setToAddress('recipient@example.com')
+            ->setToAddress($toAddress)
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename($filename)
             ->setAttachmentContentType('application/xml')
             ->setAttachmentContent($content)
-            ->setOwner($user)
         ;
 
         return $email;

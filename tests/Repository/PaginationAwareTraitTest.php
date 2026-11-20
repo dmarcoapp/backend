@@ -9,7 +9,6 @@ use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Enum\DMARC\DispositionType;
 use App\Enum\DMARC\DKIMAlign;
 use App\Enum\DMARC\SPFAlign;
@@ -28,8 +27,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 {
     public function testPaginateCoversFilterOperatorsAndSort(): void
     {
-        $user = $this->createAccount('pagination-trait-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->entityManager->persist($domain);
@@ -63,8 +61,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateDefaultsToIdSortWhenSortEmpty(): void
     {
-        $user = $this->createAccount('pagination-default-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $domain = new Domain($user, 'default.example.com');
+        $domain = new Domain('default.example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->entityManager->persist($domain);
@@ -103,10 +100,8 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateSupportsRelationFieldFilter(): void
     {
-        $user = $this->createAccount('pagination-relation-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $reportA = $this->createReport($user, 'example.com');
-        $reportB = $this->createReport($user, 'other.example');
+        $reportA = $this->createReport('example.com');
+        $reportB = $this->createReport('other.example');
 
         $recordA1 = $this->createRecord($reportA, '192.0.2.1');
         $recordA2 = $this->createRecord($reportA, '192.0.2.1');
@@ -132,8 +127,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
 
     public function testPaginateUsesProvidedQueryBuilderWhenPassedExplicitly(): void
     {
-        $user = $this->createAccount('pagination-explicit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $domain = new Domain($user, 'explicit.example.com');
+        $domain = new Domain('explicit.example.com');
         $domain->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->setPrivateProperty($domain, 'createdAt', new \DateTimeImmutable('2024-01-01 00:00:00'));
         $this->entityManager->persist($domain);
@@ -219,7 +213,7 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
         };
     }
 
-    private function createReport(User $user, string $domain): Report
+    private function createReport(string $domain): Report
     {
         $email = new Email();
         $email
@@ -229,7 +223,6 @@ final class PaginationAwareTraitTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();

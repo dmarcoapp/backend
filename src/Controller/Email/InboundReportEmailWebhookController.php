@@ -9,14 +9,15 @@ use App\Message\Email\InboundEmail;
 use App\Service\Email\AggregateReportPostboxResolver;
 use App\Service\Email\InboundReportEmailWebhookSignatureVerifier;
 use App\Service\Email\ReportAttachmentDecoder;
+use App\Service\Platform\PlatformSettingsProvider;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -29,8 +30,7 @@ final class InboundReportEmailWebhookController extends AbstractController
         private readonly AggregateReportPostboxResolver $postboxResolver,
         private readonly ReportAttachmentDecoder $attachmentDecoder,
         private readonly MessageBusInterface $messageBus,
-        #[Autowire(env: 'APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET')]
-        private readonly string $webhookSecret,
+        private readonly PlatformSettingsProvider $settings,
     ) {}
 
     #[OA\Post(
@@ -42,7 +42,11 @@ final class InboundReportEmailWebhookController extends AbstractController
     )]
     #[OA\Response(
         response: 404,
-        description: 'The recipient is not a known report postbox. The sender is expected to discard the message.',
+        description: 'The recipient is not a known report postbox, so the sender is expected to discard the message.',
+    )]
+    #[OA\Response(
+        response: 503,
+        description: 'API intake is off, or no gateway secret is set. The sender is expected to keep the message and try again.',
     )]
     #[OA\Response(
         response: 422,
@@ -55,13 +59,22 @@ final class InboundReportEmailWebhookController extends AbstractController
         #[MapRequestPayload]
         Email $email,
     ): JsonResponse {
+        // Without API intake, or without a secret to check against, nothing is
+        // taken. Not with a 404, which tells the gateway to discard the message:
+        // switching intake off for a while must not cost the reports sent
+        // meanwhile.
+        $secret = $this->settings->isApiIntakeEnabled() ? $this->settings->gatewaySecret() : null;
+        if (null === $secret || '' === $secret) {
+            throw new ServiceUnavailableHttpException(message: 'Report intake through the API is off.');
+        }
+
         if (!$this->signatureVerifier->verify(
             bodyString: $request->getContent(),
             timestamp: $request->headers->get('x-timestamp')
                 ?? throw new BadRequestHttpException('Missing timestamp header.'),
             signatureHeader: $request->headers->get('x-signature')
                 ?? throw new BadRequestHttpException('Missing signature header.'),
-            secret: $this->webhookSecret,
+            secret: $secret,
         )) {
             throw new UnauthorizedHttpException('signature', 'Invalid signature.');
         }
@@ -70,7 +83,7 @@ final class InboundReportEmailWebhookController extends AbstractController
         // recipient here, rather than dropping it later, tells the sender to
         // discard the message instead of keeping it for another attempt.
         $recipient = $email->to[0] ?? '';
-        if (!is_string($recipient) || null === $this->postboxResolver->resolveUser($recipient)) {
+        if (!is_string($recipient) || !$this->postboxResolver->isReportAddress($recipient)) {
             throw new NotFoundHttpException('Unknown report recipient.');
         }
 

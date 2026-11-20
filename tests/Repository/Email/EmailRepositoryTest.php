@@ -174,7 +174,6 @@ final class EmailRepositoryTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         return $email;

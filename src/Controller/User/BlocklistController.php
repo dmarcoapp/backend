@@ -11,7 +11,6 @@ use App\DTO\Output\Common\PaginationApi;
 use App\DTO\Output\Common\PaginationMetaApi;
 use App\DTO\Output\User\BlocklistEntryApi;
 use App\Entity\User\BlocklistEntry;
-use App\Entity\User\User;
 use App\Repository\User\BlocklistEntryRepository;
 use App\Service\User\BlocklistMatcher;
 use Nelmio\ApiDocBundle\Attribute\Model;
@@ -24,9 +23,7 @@ use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Uid\Uuid;
 use Symfonycasts\MicroMapper\MicroMapperInterface;
 
 #[IsGranted('ROLE_USER')]
@@ -38,7 +35,7 @@ final class BlocklistController extends AbstractController
     ) {}
 
     #[OA\Get(
-        summary: 'Gets a paginated blocklist for the authenticated user.',
+        summary: 'Gets the blocklist, paginated.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -62,14 +59,13 @@ final class BlocklistController extends AbstractController
         )
     )]
     #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/blocklist', name: 'app_blocklist_list', methods: [Request::METHOD_GET])]
+    #[Route('/v1/blocklist', name: 'app_blocklist_list', methods: [Request::METHOD_GET])]
+    #[Route('/v1/user/blocklist', name: 'app_blocklist_list_legacy', methods: [Request::METHOD_GET])]
     public function list(
         #[MapQueryString]
         Pagination $pagination,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
-        $paginator = $this->repository->getBlocklistEntriesForUserPaginated($user, $pagination);
+        $paginator = $this->repository->getBlocklistEntriesPaginated($pagination);
 
         return new JsonResponse(
             new PaginationApi(
@@ -80,7 +76,7 @@ final class BlocklistController extends AbstractController
     }
 
     #[OA\Post(
-        summary: 'Creates a blocklist entry for the authenticated user.',
+        summary: 'Creates a blocklist entry.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -89,19 +85,18 @@ final class BlocklistController extends AbstractController
         content: new Model(type: BlocklistEntryApi::class)
     )]
     #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/blocklist', name: 'app_blocklist_create', methods: [Request::METHOD_POST])]
+    #[Route('/v1/blocklist', name: 'app_blocklist_create', methods: [Request::METHOD_POST])]
+    #[Route('/v1/user/blocklist', name: 'app_blocklist_create_legacy', methods: [Request::METHOD_POST])]
     public function create(
         #[MapRequestPayload]
         BlocklistEntryCreate $input,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
         $pattern = BlocklistMatcher::normalizeValue($input->pattern ?? '');
-        if ($this->repository->findOneBy(['user' => $user, 'pattern' => $pattern])) {
+        if ($this->repository->findOneBy(['pattern' => $pattern])) {
             throw new ConflictHttpException('Blocklist entry already exists.');
         }
 
-        $entry = new BlocklistEntry($user, $pattern);
+        $entry = new BlocklistEntry($pattern);
         $this->repository->save($entry);
 
         return new JsonResponse(
@@ -111,7 +106,7 @@ final class BlocklistController extends AbstractController
     }
 
     #[OA\Delete(
-        summary: 'Deletes a blocklist entry for the authenticated user.',
+        summary: 'Deletes a blocklist entry.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -119,21 +114,18 @@ final class BlocklistController extends AbstractController
         description: 'Blocklist entry deleted.',
     )]
     #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/blocklist/{blocklistEntry}', name: 'app_blocklist_delete', methods: [Request::METHOD_DELETE])]
+    #[Route('/v1/blocklist/{blocklistEntry}', name: 'app_blocklist_delete', methods: [Request::METHOD_DELETE])]
+    #[Route('/v1/user/blocklist/{blocklistEntry}', name: 'app_blocklist_delete_legacy', methods: [Request::METHOD_DELETE])]
     public function delete(
         BlocklistEntry $blocklistEntry,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
-        $this->assertEntryOwnership($blocklistEntry, $user);
-
         $this->repository->delete($blocklistEntry);
 
         return new JsonResponse();
     }
 
     #[OA\Delete(
-        summary: 'Deletes selected blocklist entries for the authenticated user.',
+        summary: 'Deletes selected blocklist entries.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -141,18 +133,17 @@ final class BlocklistController extends AbstractController
         description: 'Bulk delete result.',
     )]
     #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/blocklist', name: 'app_blocklist_delete_bulk', methods: [Request::METHOD_DELETE])]
+    #[Route('/v1/blocklist', name: 'app_blocklist_delete_bulk', methods: [Request::METHOD_DELETE])]
+    #[Route('/v1/user/blocklist', name: 'app_blocklist_delete_bulk_legacy', methods: [Request::METHOD_DELETE])]
     public function deleteBulk(
         #[MapRequestPayload]
         BlocklistEntryBulkDelete $input,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
         $ids = array_values(array_unique($input->ids));
-        $entries = $this->repository->getEntriesByIdsForUser($user, $ids);
+        $entries = $this->repository->getEntriesByIds($ids);
 
         if (count($ids) !== count($entries)) {
-            throw $this->createAccessDeniedException();
+            throw $this->createNotFoundException('Some of the blocklist entries do not exist.');
         }
 
         $this->repository->deleteMany($entries);
@@ -160,19 +151,5 @@ final class BlocklistController extends AbstractController
         return new JsonResponse([
             'deletedCount' => count($entries),
         ]);
-    }
-
-    private function assertEntryOwnership(BlocklistEntry $blocklistEntry, User $user): void
-    {
-        $entryUserId = $blocklistEntry->getUser()->getId();
-        $userId = $user->getId();
-
-        if (
-            !$entryUserId instanceof Uuid
-            || !$userId instanceof Uuid
-            || !$entryUserId->equals($userId)
-        ) {
-            throw $this->createAccessDeniedException();
-        }
     }
 }

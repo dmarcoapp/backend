@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\IpLookup;
 
+use App\Entity\Platform\PlatformSettings;
 use App\Service\IpLookup\CompositeIpLookupService;
 use App\Service\IpLookup\IpWhoisLookupService;
 use App\Service\IpLookup\RdapLookupService;
+use App\Tests\Support\PlatformSettingsTestFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -25,7 +27,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService(new MockHttpClient()),
             new RdapLookupService(new MockHttpClient()),
             new ArrayAdapter(),
-            true,
+            PlatformSettingsTestFactory::provider(),
         );
 
         $this->expectException(\InvalidArgumentException::class);
@@ -84,7 +86,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService($ipWhoisClient),
             new RdapLookupService($rdapClient),
             new ArrayAdapter(),
-            true,
+            PlatformSettingsTestFactory::provider(),
         );
 
         $result = $service->lookup('192.0.2.1');
@@ -143,7 +145,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService($ipWhoisClient),
             new RdapLookupService($rdapClient),
             $cache,
-            true,
+            PlatformSettingsTestFactory::provider(),
         );
 
         $first = $service->lookup('198.51.100.10');
@@ -163,7 +165,7 @@ final class CompositeIpLookupServiceTest extends TestCase
             new IpWhoisLookupService($ipWhoisClient),
             new RdapLookupService($rdapClient),
             new ArrayAdapter(),
-            false,
+            PlatformSettingsTestFactory::provider(new PlatformSettings('token')->setIpLookupEnabled(false)),
         );
 
         self::assertSame([

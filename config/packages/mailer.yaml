@@ -1,7 +1,5 @@
 framework:
     mailer:
-        dsn: '%env(MAILER_DSN)%'
-        envelope:
-            sender: '%env(APP_EMAIL_SENDER_ADDRESS)%'
-        headers:
-            From: 'DMARCo <%env(APP_EMAIL_SENDER_ADDRESS)%>'
+        # The mail server comes from the platform settings, read when a message
+        # is sent. See App\Service\Mailer\PlatformTransportFactory.
+        dsn: 'platform://default'

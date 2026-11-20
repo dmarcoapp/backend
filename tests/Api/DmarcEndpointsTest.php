@@ -15,14 +15,11 @@ use App\Entity\Email\Email;
  */
 final class DmarcEndpointsTest extends ApiIntegrationTestCase
 {
-    public function testDomainsAndReportsRequireOwnership(): void
+    public function testTheAccountReachesEveryDomainAndReport(): void
     {
-        $owner = $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createAccount('other@example.com', 'Str0ngPassw0rd!@#');
-        self::assertNotNull($owner->getId());
-        self::assertTrue($this->entityManager->contains($owner));
+        $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
 
-        $domain = new Domain($owner, 'example.com');
+        $domain = new Domain('example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
         $this->entityManager->persist($domain);
 
@@ -34,7 +31,6 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($owner)
         ;
 
         $report = new Report();
@@ -61,7 +57,6 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
         self::assertCount(1, $this->entityManager->getRepository(Domain::class)->findAll());
 
         $ownerToken = $this->login('owner@example.com', 'Str0ngPassw0rd!@#');
-        $otherToken = $this->login('other@example.com', 'Str0ngPassw0rd!@#');
 
         $domainsResponse = $this->requestJson(
             method: 'GET',
@@ -80,14 +75,6 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
 
         self::assertSame(200, $domainGetResponse->getStatusCode());
 
-        $domainForbiddenResponse = $this->requestJson(
-            method: 'GET',
-            uri: '/v1/dmarc/domains/'.$domain->getId(),
-            headers: $this->authorizeHeaders($otherToken),
-        );
-
-        self::assertSame(403, $domainForbiddenResponse->getStatusCode());
-
         $reportsResponse = $this->requestJson(
             method: 'GET',
             uri: '/v1/dmarc/reports',
@@ -105,37 +92,13 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
 
         self::assertSame(200, $reportGetResponse->getStatusCode());
 
-        $reportForbiddenResponse = $this->requestJson(
-            method: 'GET',
-            uri: '/v1/dmarc/reports/'.$report->getId(),
-            headers: $this->authorizeHeaders($otherToken),
-        );
-
-        self::assertSame(403, $reportForbiddenResponse->getStatusCode());
-
-        $reportDeleteForbiddenResponse = $this->requestJson(
-            method: 'DELETE',
-            uri: '/v1/dmarc/reports/'.$report->getId(),
-            headers: $this->authorizeHeaders($otherToken),
-        );
-
-        self::assertSame(403, $reportDeleteForbiddenResponse->getStatusCode());
-
-        $reportXmlForbiddenResponse = $this->requestJson(
-            method: 'GET',
-            uri: '/v1/dmarc/reports/'.$report->getId().'/xml',
-            headers: $this->authorizeHeaders($otherToken),
-        );
-
-        self::assertSame(403, $reportXmlForbiddenResponse->getStatusCode());
-
-        $reportRecordsForbiddenResponse = $this->requestJson(
+        $reportRecordsResponse = $this->requestJson(
             method: 'GET',
             uri: '/v1/dmarc/reports/'.$report->getId().'/records',
-            headers: $this->authorizeHeaders($otherToken),
+            headers: $this->authorizeHeaders($ownerToken),
         );
 
-        self::assertSame(403, $reportRecordsForbiddenResponse->getStatusCode());
+        self::assertSame(200, $reportRecordsResponse->getStatusCode());
 
         $reportXmlResponse = $this->requestJson(
             method: 'GET',

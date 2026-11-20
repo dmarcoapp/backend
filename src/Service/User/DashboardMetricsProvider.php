@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\User;
 
 use App\DTO\Output\User\Dashboard;
-use App\Entity\User\User;
 use App\Helper\Date;
 use App\Helper\Trend;
 use App\Repository\DMARC\DomainRepository;
@@ -18,36 +17,36 @@ final readonly class DashboardMetricsProvider
         private DomainRepository $domainRepository,
     ) {}
 
-    public function provide(User $user, int $periodDays): Dashboard
+    public function provide(int $periodDays): Dashboard
     {
         $currentPeriod = Date::createDatePeriod($periodDays);
         $previousPeriod = Date::createDatePeriod($periodDays, true);
 
-        $reportCount = $this->reportRepository->getReportCountInDatePeriod($currentPeriod, $user);
-        $previousReportCount = $this->reportRepository->getReportCountInDatePeriod($previousPeriod, $user);
+        $reportCount = $this->reportRepository->getReportCountInDatePeriod($currentPeriod);
+        $previousReportCount = $this->reportRepository->getReportCountInDatePeriod($previousPeriod);
 
-        $messageCount = $this->reportRepository->getSumCountInDatePeriod($currentPeriod, $user);
-        $previousMessageCount = $this->reportRepository->getSumCountInDatePeriod($previousPeriod, $user);
+        $messageCount = $this->reportRepository->getSumCountInDatePeriod($currentPeriod);
+        $previousMessageCount = $this->reportRepository->getSumCountInDatePeriod($previousPeriod);
 
-        $passRate = $this->reportRepository->getPassRate($currentPeriod, $user);
-        $previousPassRate = $this->reportRepository->getPassRate($previousPeriod, $user);
+        $passRate = $this->reportRepository->getPassRate($currentPeriod);
+        $previousPassRate = $this->reportRepository->getPassRate($previousPeriod);
 
-        $threatsBlockedCount = $this->reportRepository->getThreatCount($currentPeriod, $user);
-        $previousThreatsBlockedCount = $this->reportRepository->getThreatCount($previousPeriod, $user);
+        $threatsBlockedCount = $this->reportRepository->getThreatCount($currentPeriod);
+        $previousThreatsBlockedCount = $this->reportRepository->getThreatCount($previousPeriod);
 
-        $messageCountByDate = $this->reportRepository->getMessageCountByDate($currentPeriod, $user);
-        $threatCountByDate = $this->reportRepository->getThreatCountByDate($currentPeriod, $user);
+        $messageCountByDate = $this->reportRepository->getMessageCountByDate($currentPeriod);
+        $threatCountByDate = $this->reportRepository->getThreatCountByDate($currentPeriod);
 
-        [$complianceAverage] = $this->reportRepository->getComplianceAverage($currentPeriod, $user);
-        [$previousComplianceAverage] = $this->reportRepository->getComplianceAverage($previousPeriod, $user);
+        [$complianceAverage] = $this->reportRepository->getComplianceAverage($currentPeriod);
+        [$previousComplianceAverage] = $this->reportRepository->getComplianceAverage($previousPeriod);
 
-        $newDomainCount = $this->domainRepository->getNewDomainCount($currentPeriod, $user);
-        $previousNewDomainCount = $this->domainRepository->getNewDomainCount($previousPeriod, $user);
-        $newDomains = $this->domainRepository->getNewDomains($currentPeriod, $user);
-        $topOffenders = $this->reportRepository->getOffendersInDatePeriod($currentPeriod, $user);
-        $topSenders = $this->reportRepository->getTopSendersInDatePeriod($currentPeriod, $user);
-        $sourceCountryDistribution = $this->reportRepository->getSourceCountryDistributionInDatePeriod($currentPeriod, $user);
-        $topReportingOrganizations = $this->reportRepository->getTopReportingOrganizationsInDatePeriod($currentPeriod, $user);
+        $newDomainCount = $this->domainRepository->getNewDomainCount($currentPeriod);
+        $previousNewDomainCount = $this->domainRepository->getNewDomainCount($previousPeriod);
+        $newDomains = $this->domainRepository->getNewDomains($currentPeriod);
+        $topOffenders = $this->reportRepository->getOffendersInDatePeriod($currentPeriod);
+        $topSenders = $this->reportRepository->getTopSendersInDatePeriod($currentPeriod);
+        $sourceCountryDistribution = $this->reportRepository->getSourceCountryDistributionInDatePeriod($currentPeriod);
+        $topReportingOrganizations = $this->reportRepository->getTopReportingOrganizationsInDatePeriod($currentPeriod);
 
         return new Dashboard(
             reportCount: $reportCount,

@@ -21,11 +21,18 @@ use App\Enum\DMARC\SPFResult;
  */
 final class DashboardTest extends ApiIntegrationTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->removeReportData();
+    }
+
     public function testDashboardReturnsMetricsAndCaches(): void
     {
-        $user = $this->createAccount('dash@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash@example.com', 'Str0ngPassw0rd!@#');
 
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
         $this->entityManager->persist($domain);
 
@@ -37,7 +44,6 @@ final class DashboardTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -64,12 +70,14 @@ final class DashboardTest extends ApiIntegrationTestCase
 
         $firstResponse = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=7',
+            uri: '/v1/dashboard?periodDays=7',
             headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(200, $firstResponse->getStatusCode());
         $firstPayload = json_decode((string) $firstResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(1, $firstPayload['reportCount'] ?? null);
+        self::assertSame(5, $firstPayload['messageCount'] ?? null);
 
         foreach (['reportCount', 'messageCount', 'passRate', 'compliance', 'newDomainCount', 'threatCountByDate', 'topOffenders', 'topSenders', 'sourceCountryDistribution', 'topReportingOrganizations'] as $key) {
             self::assertArrayHasKey($key, $firstPayload);
@@ -77,7 +85,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
         $secondResponse = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=7',
+            uri: '/v1/dashboard?periodDays=7',
             headers: $this->authorizeHeaders($token),
         );
 
@@ -93,83 +101,51 @@ final class DashboardTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=5',
+            uri: '/v1/dashboard?periodDays=5',
             headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(422, $response->getStatusCode());
     }
 
-    public function testDashboardMetricsAreUserSpecific(): void
+    public function testDashboardCountsNothingWithoutReports(): void
     {
-        $userWithData = $this->createAccount('dash3@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash3@example.com', 'Str0ngPassw0rd!@#');
+
+        $token = $this->login('dash3@example.com', 'Str0ngPassw0rd!@#');
+
+        $response = $this->requestJson(
+            method: 'GET',
+            uri: '/v1/dashboard?periodDays=7',
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode());
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(0, $payload['reportCount'] ?? null);
+        self::assertSame(0, $payload['messageCount'] ?? null);
+    }
+
+    public function testDashboardKeepsAnsweringOnItsOldPath(): void
+    {
         $this->createAccount('dash4@example.com', 'Str0ngPassw0rd!@#');
 
-        $domain = new Domain($userWithData, 'example.com');
-        $domain->setLastChecked(new \DateTimeImmutable());
-        $this->entityManager->persist($domain);
+        $token = $this->login('dash4@example.com', 'Str0ngPassw0rd!@#');
 
-        $email = new Email();
-        $email
-            ->setCreatedAt(new \DateTimeImmutable('-1 day'))
-            ->setFromAddress('reporter@example.com')
-            ->setToAddress('inbound@example.com')
-            ->setMessageId('<message@example.com>')
-            ->setAttachmentFilename('report.xml')
-            ->setAttachmentContentType('application/xml')
-            ->setOwner($userWithData)
-        ;
-
-        $report = new Report();
-        $report
-            ->setEmail($email)
-            ->setRawXML('<xml/>')
-            ->setIsProcessed(true)
-            ->setBeginDate(new \DateTimeImmutable('-2 days'))
-            ->setEndDate(new \DateTimeImmutable('-1 day'))
-            ->setDomain('example.com')
-            ->setSumCount(5)
-            ->setDmarcCompliance(1.0)
-            ->setSpfCompliance(1.0)
-            ->setDkimCompliance(1.0)
-        ;
-
-        $email->setReport($report);
-
-        $this->entityManager->persist($email);
-        $this->entityManager->persist($report);
-        $this->entityManager->flush();
-
-        $tokenWithData = $this->login('dash3@example.com', 'Str0ngPassw0rd!@#');
-        $tokenNoData = $this->login('dash4@example.com', 'Str0ngPassw0rd!@#');
-
-        $withDataResponse = $this->requestJson(
+        $response = $this->requestJson(
             method: 'GET',
             uri: '/v1/user/dashboard?periodDays=7',
-            headers: $this->authorizeHeaders($tokenWithData),
+            headers: $this->authorizeHeaders($token),
         );
 
-        self::assertSame(200, $withDataResponse->getStatusCode());
-        $withDataPayload = json_decode((string) $withDataResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame(1, $withDataPayload['reportCount'] ?? null);
-        self::assertSame(5, $withDataPayload['messageCount'] ?? null);
-
-        $noDataResponse = $this->requestJson(
-            method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=7',
-            headers: $this->authorizeHeaders($tokenNoData),
-        );
-
-        self::assertSame(200, $noDataResponse->getStatusCode());
-        $noDataPayload = json_decode((string) $noDataResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame(0, $noDataPayload['reportCount'] ?? null);
+        self::assertSame(200, $response->getStatusCode());
     }
 
     public function testDashboardThreatCountByDateCountsQuarantineAndReject(): void
     {
-        $user = $this->createAccount('dash5@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash5@example.com', 'Str0ngPassw0rd!@#');
 
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
         $this->entityManager->persist($domain);
 
@@ -181,7 +157,6 @@ final class DashboardTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $beginDate = new \DateTimeImmutable('-2 days');
@@ -213,7 +188,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=7',
+            uri: '/v1/dashboard?periodDays=7',
             headers: $this->authorizeHeaders($token),
         );
 
@@ -226,9 +201,9 @@ final class DashboardTest extends ApiIntegrationTestCase
 
     public function testDashboardTopMetricsContainExpectedValues(): void
     {
-        $user = $this->createAccount('dash6@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('dash6@example.com', 'Str0ngPassw0rd!@#');
 
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domain->setLastChecked(new \DateTimeImmutable());
         $this->entityManager->persist($domain);
 
@@ -240,7 +215,6 @@ final class DashboardTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -302,7 +276,7 @@ final class DashboardTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/dashboard?periodDays=7',
+            uri: '/v1/dashboard?periodDays=7',
             headers: $this->authorizeHeaders($token),
         );
 

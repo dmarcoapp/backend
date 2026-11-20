@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
-use App\Entity\User\User;
+use App\Entity\Platform\PlatformSettings;
 use App\Message\Email\InboundEmail;
-use App\Repository\User\UserRepository;
 use App\Service\Email\AggregateReportPostboxResolver;
 use App\Service\Email\InboundReportEmailWebhookSignatureVerifier;
 use App\Service\Email\ReportAttachmentDecoder;
+use App\Service\Platform\PlatformSettingsProvider;
+use App\Service\Security\SecretBox;
+use App\Tests\Support\PlatformSettingsTestFactory;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\Envelope;
@@ -22,6 +24,26 @@ use Symfony\Component\Messenger\MessageBusInterface;
  */
 final class WebhookEndpointTest extends ApiTestCase
 {
+    private const string SECRET = 'test-gateway-secret';
+
+    private ?PlatformSettings $settings = null;
+
+    // Not a 404, which tells the gateway to discard the report: it keeps the
+    // report and tries again instead.
+    public function testWebhookAsksTheGatewayToWaitWhileApiIntakeIsOff(): void
+    {
+        $this->settings = self::settings()->setApiIntakeEnabled(false);
+
+        self::assertSame(503, $this->postSignedWithKnownRecipient($this->validWebhookPayload())->getStatusCode());
+    }
+
+    public function testWebhookAsksTheGatewayToWaitWithoutAGatewaySecret(): void
+    {
+        $this->settings = self::settings()->setEncryptedGatewaySecret(null);
+
+        self::assertSame(503, $this->postSignedWithKnownRecipient($this->validWebhookPayload())->getStatusCode());
+    }
+
     public function testWebhookRejectsMissingHeaders(): void
     {
         $response = $this->requestJson(
@@ -57,7 +79,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) time();
-        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $secret = self::SECRET;
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
         $response = $this->requestJson(
@@ -78,7 +100,7 @@ final class WebhookEndpointTest extends ApiTestCase
         $payload = $this->validWebhookPayload();
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) time();
-        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $secret = self::SECRET;
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
         $messageBus = $this->createMock(MessageBusInterface::class);
@@ -99,7 +121,7 @@ final class WebhookEndpointTest extends ApiTestCase
             ],
             configureContainer: function (ContainerInterface $container) use ($messageBus): void {
                 $container->set(MessageBusInterface::class, $messageBus);
-                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(new User()));
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverFor('inbound'));
             },
         );
 
@@ -111,7 +133,7 @@ final class WebhookEndpointTest extends ApiTestCase
         $payload = $this->validWebhookPayload();
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) (time() - InboundReportEmailWebhookSignatureVerifier::MAX_CLOCK_SKEW_SECONDS - 60);
-        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $secret = self::SECRET;
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
         // Correctly signed, so only the age of the timestamp can reject it.
@@ -133,7 +155,7 @@ final class WebhookEndpointTest extends ApiTestCase
         $payload = $this->validWebhookPayload();
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) time();
-        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $secret = self::SECRET;
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
         // A 404 tells the sender to discard the message instead of trying again.
@@ -150,7 +172,7 @@ final class WebhookEndpointTest extends ApiTestCase
             ],
             configureContainer: function (ContainerInterface $container) use ($messageBus): void {
                 $container->set(MessageBusInterface::class, $messageBus);
-                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(null));
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverFor('someone-else'));
             },
         );
 
@@ -179,7 +201,7 @@ final class WebhookEndpointTest extends ApiTestCase
     {
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) time();
-        $secret = (string) ($_SERVER['APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'] ?? getenv('APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET'));
+        $secret = self::SECRET;
         $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
 
         // The report is refused while the sender still holds it, so nothing is
@@ -197,17 +219,49 @@ final class WebhookEndpointTest extends ApiTestCase
             ],
             configureContainer: function (ContainerInterface $container) use ($messageBus): void {
                 $container->set(MessageBusInterface::class, $messageBus);
-                $container->set(AggregateReportPostboxResolver::class, $this->resolverReturning(new User()));
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverFor('inbound'));
             },
         );
     }
 
-    private function resolverReturning(?User $user): AggregateReportPostboxResolver
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('findOneBy')->willReturn($user);
+    /**
+     * Every request sees API intake on and the gateway secret set, unless a
+     * test says otherwise.
+     */
+    #[\Override]
+    protected function requestJson(
+        string $method,
+        string $uri,
+        ?array $payload = null,
+        array $headers = [],
+        ?callable $configureContainer = null,
+        bool $catch = true,
+    ): Response {
+        $settings = $this->settings ?? self::settings();
 
-        return new AggregateReportPostboxResolver($userRepository);
+        return parent::requestJson($method, $uri, $payload, $headers, static function (ContainerInterface $container) use ($configureContainer, $settings): void {
+            $container->set(PlatformSettingsProvider::class, PlatformSettingsTestFactory::provider($settings));
+            if (null !== $configureContainer) {
+                $configureContainer($container);
+            }
+        }, $catch);
+    }
+
+    private static function settings(): PlatformSettings
+    {
+        return new PlatformSettings('inbound')
+            ->setApiIntakeEnabled(true)
+            ->setEncryptedGatewaySecret(new SecretBox(PlatformSettingsTestFactory::KEY)->encrypt(self::SECRET, PlatformSettings::GATEWAY_SECRET_CONTEXT))
+        ;
+    }
+
+    /**
+     * The payloads are addressed to inbound@example.com, so a token of
+     * "inbound" makes that the report address.
+     */
+    private function resolverFor(string $token): AggregateReportPostboxResolver
+    {
+        return new AggregateReportPostboxResolver(PlatformSettingsTestFactory::provider(new PlatformSettings($token)));
     }
 
     private function validWebhookPayload(): array

@@ -31,6 +31,15 @@ final readonly class ReportXMLProcessor
 
     public function validate(string $xmlContent): bool
     {
+        // A report has no use for a document type, and one is how entity
+        // expansion and external entities get in, so it ends the check before
+        // any parser sees the document.
+        if (1 === preg_match('/<!\s*(DOCTYPE|ENTITY)/i', $xmlContent)) {
+            $this->logger->error('Report XML declares a document type.');
+
+            return false;
+        }
+
         $prevInternalErrors = libxml_use_internal_errors(true);
         $prevEntityLoader = libxml_get_external_entity_loader();
         libxml_clear_errors();
@@ -45,7 +54,7 @@ final readonly class ReportXMLProcessor
             $dom->recover = false;
             $dom->preserveWhiteSpace = false;
 
-            if (false === $dom->loadXML($xmlContent, LIBXML_NONET | LIBXML_COMPACT)) {
+            if (false === $dom->loadXML($xmlContent, LIBXML_NONET | LIBXML_COMPACT) || null !== $dom->doctype) {
                 return false;
             }
 

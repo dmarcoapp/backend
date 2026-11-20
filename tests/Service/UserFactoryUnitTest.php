@@ -16,16 +16,10 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  */
 final class UserFactoryUnitTest extends TestCase
 {
-    public function testCreateRegeneratesThePostboxTokenOnCollision(): void
+    public function testCreateHashesThePasswordAndSaves(): void
     {
         $userRepository = $this->createMock(UserRepository::class);
         $passwordHasher = $this->createStub(UserPasswordHasherInterface::class);
-
-        $userRepository->expects(self::exactly(2))
-            ->method('findOneBy')
-            ->with(self::arrayHasKey('sharedPostboxIdentifierToken'))
-            ->willReturnOnConsecutiveCalls(new \stdClass(), null)
-        ;
 
         $savedUser = null;
         $userRepository->expects(self::once())
@@ -39,13 +33,12 @@ final class UserFactoryUnitTest extends TestCase
         $factory = new UserFactory($userRepository, $passwordHasher);
 
         $user = $factory->create(
-            email: 'collision@example.com',
-            name: 'Collision User',
+            email: 'account@example.com',
+            name: 'Account',
             plainPassword: 'Str0ngPassw0rd!@#',
         );
 
         self::assertSame('hashed-password', $user->getPassword());
-        self::assertNotNull($user->getSharedPostboxIdentifierToken());
         self::assertSame($user, $savedUser);
     }
 }

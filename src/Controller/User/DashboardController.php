@@ -6,7 +6,6 @@ namespace App\Controller\User;
 
 use App\DTO\Input\DMARC\DashboardSettings;
 use App\DTO\Output\User\Dashboard as DashboardApi;
-use App\Entity\User\User;
 use App\Service\User\DashboardMetricsProvider;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -15,9 +14,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
@@ -30,7 +27,7 @@ final class DashboardController extends AbstractController
     ) {}
 
     #[OA\Get(
-        summary: 'Gets the dashboard metrics for the authenticated user.',
+        summary: 'Gets the dashboard metrics.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -39,24 +36,18 @@ final class DashboardController extends AbstractController
         content: new Model(type: DashboardApi::class)
     )]
     #[OA\Tag(name: 'User')]
-    #[Route('/v1/user/dashboard', name: 'app_user_dashboard', methods: [Request::METHOD_GET])]
+    #[Route('/v1/dashboard', name: 'app_dashboard', methods: [Request::METHOD_GET])]
+    #[Route('/v1/user/dashboard', name: 'app_dashboard_legacy', methods: [Request::METHOD_GET])]
     public function get(
-        #[CurrentUser]
-        User $user,
         #[MapQueryString]
         DashboardSettings $settings,
     ): JsonResponse {
-        $userId = $user->getId();
-        if (!$userId instanceof Uuid) {
-            throw $this->createAccessDeniedException();
-        }
+        $key = sprintf('dashboard-%d', $settings->periodDays);
 
-        $key = sprintf('dashboard-%s-%d', $userId->toRfc4122(), $settings->periodDays);
-
-        return $this->cache->get($key, function (ItemInterface $item) use ($user, $settings) {
+        return $this->cache->get($key, function (ItemInterface $item) use ($settings) {
             $item->expiresAt(new \DateTimeImmutable('+5 minutes'));
 
-            return new JsonResponse($this->dashboardMetricsProvider->provide($user, $settings->periodDays));
+            return new JsonResponse($this->dashboardMetricsProvider->provide($settings->periodDays));
         });
     }
 }

@@ -45,18 +45,12 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         ;
     }
 
-    public function getAllUserIds(?int $limit = null): array
+    /**
+     * The one account DMARCo has, or null before it is created.
+     */
+    public function findAccount(): ?User
     {
-        $queryBuilder = $this->createQueryBuilder('u')
-            ->select('u.id')
-            ->orderBy('u.id', 'ASC')
-        ;
-
-        if (null !== $limit) {
-            $queryBuilder->setMaxResults($limit);
-        }
-
-        return $queryBuilder->getQuery()->getSingleColumnResult();
+        return $this->findOneBy([], ['createdAt' => 'ASC']);
     }
 
     public function save(User $user): void

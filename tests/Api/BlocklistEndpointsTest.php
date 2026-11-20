@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Api;
 
 use App\Entity\User\BlocklistEntry;
-use App\Entity\User\User;
 
 /**
  * @internal
@@ -14,19 +13,16 @@ use App\Entity\User\User;
  */
 final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 {
-    public function testBlocklistCrudAndOwnership(): void
+    public function testBlocklistCrud(): void
     {
-        $owner = $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createAccount('other@example.com', 'Str0ngPassw0rd!@#');
-
-        $ownerToken = $this->login('owner@example.com', 'Str0ngPassw0rd!@#');
-        $otherToken = $this->login('other@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
+        $token = $this->login('owner@example.com', 'Str0ngPassw0rd!@#');
 
         $createResponse = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@example.com'],
-            headers: $this->authorizeHeaders($ownerToken),
+            headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(201, $createResponse->getStatusCode(), (string) $createResponse->getContent());
@@ -36,65 +32,71 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $duplicateResponse = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@example.com'],
-            headers: $this->authorizeHeaders($ownerToken),
+            headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(409, $duplicateResponse->getStatusCode(), (string) $duplicateResponse->getContent());
 
+        // An entry made anywhere, by a command or an earlier version, is on the
+        // same list.
+        $storedEntry = new BlocklistEntry('*@stored.example');
+        $this->entityManager->persist($storedEntry);
+        $this->entityManager->flush();
+
         $listResponse = $this->requestJson(
             method: 'GET',
-            uri: '/v1/user/blocklist',
-            headers: $this->authorizeHeaders($ownerToken),
+            uri: '/v1/blocklist',
+            headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(200, $listResponse->getStatusCode(), (string) $listResponse->getContent());
         self::assertStringContainsString('*@example.com', (string) $listResponse->getContent());
-
-        $managedOther = $this->entityManager->getRepository(User::class)->find($other->getId());
-        self::assertNotNull($managedOther);
-
-        $otherEntry = new BlocklistEntry($managedOther, '*@other.example');
-        $this->entityManager->persist($otherEntry);
-        $this->entityManager->flush();
-
-        $listAfterOtherEntryResponse = $this->requestJson(
-            method: 'GET',
-            uri: '/v1/user/blocklist',
-            headers: $this->authorizeHeaders($ownerToken),
-        );
-
-        self::assertSame(200, $listAfterOtherEntryResponse->getStatusCode(), (string) $listAfterOtherEntryResponse->getContent());
-        self::assertStringContainsString('*@example.com', (string) $listAfterOtherEntryResponse->getContent());
-        self::assertStringNotContainsString('*@other.example', (string) $listAfterOtherEntryResponse->getContent());
-
-        $deleteForbiddenResponse = $this->requestJson(
-            method: 'DELETE',
-            uri: '/v1/user/blocklist/'.$createPayload['id'],
-            headers: $this->authorizeHeaders($otherToken),
-        );
-
-        self::assertSame(403, $deleteForbiddenResponse->getStatusCode());
+        self::assertStringContainsString('*@stored.example', (string) $listResponse->getContent());
 
         $deleteResponse = $this->requestJson(
             method: 'DELETE',
-            uri: '/v1/user/blocklist/'.$createPayload['id'],
-            headers: $this->authorizeHeaders($ownerToken),
+            uri: '/v1/blocklist/'.$createPayload['id'],
+            headers: $this->authorizeHeaders($token),
         );
 
         self::assertSame(200, $deleteResponse->getStatusCode());
         self::assertNull($this->entityManager->getRepository(BlocklistEntry::class)->find($createPayload['id']));
     }
 
+    public function testBlocklistKeepsAnsweringOnItsOldPath(): void
+    {
+        $this->createAccount('legacy-path@example.com', 'Str0ngPassw0rd!@#');
+        $token = $this->login('legacy-path@example.com', 'Str0ngPassw0rd!@#');
+
+        $createResponse = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/user/blocklist',
+            payload: ['pattern' => '*@legacy-path.example'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(201, $createResponse->getStatusCode(), (string) $createResponse->getContent());
+
+        $listResponse = $this->requestJson(
+            method: 'GET',
+            uri: '/v1/user/blocklist',
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $listResponse->getStatusCode(), (string) $listResponse->getContent());
+        self::assertStringContainsString('*@legacy-path.example', (string) $listResponse->getContent());
+    }
+
     public function testBlocklistCreateAllowsMultipleEntries(): void
     {
-        $user = $this->createAccount('limited@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('limited@example.com', 'Str0ngPassw0rd!@#');
         $token = $this->login('limited@example.com', 'Str0ngPassw0rd!@#');
 
         $firstResponse = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@first.example'],
             headers: $this->authorizeHeaders($token),
         );
@@ -103,7 +105,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $secondResponse = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@second.example'],
             headers: $this->authorizeHeaders($token),
         );
@@ -118,7 +120,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@example.com,foobar.com'],
             headers: $this->authorizeHeaders($token),
         );
@@ -133,7 +135,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => 'asd@asd/example.com'],
             headers: $this->authorizeHeaders($token),
         );
@@ -148,7 +150,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@*.*'],
             headers: $this->authorizeHeaders($token),
         );
@@ -163,7 +165,7 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: ['pattern' => '*@*.*.*'],
             headers: $this->authorizeHeaders($token),
         );
@@ -171,29 +173,28 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
         self::assertSame(422, $response->getStatusCode(), (string) $response->getContent());
     }
 
-    public function testBlocklistBulkDeleteRemovesOwnedEntriesByIds(): void
+    public function testBlocklistBulkDeleteRemovesTheChosenEntries(): void
     {
-        $owner = $this->createAccount('blocklist-bulk-owner@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createAccount('blocklist-bulk-other@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('blocklist-bulk@example.com', 'Str0ngPassw0rd!@#');
 
-        $ownerEntry1 = new BlocklistEntry($owner, '*@owned-1.example');
-        $ownerEntry2 = new BlocklistEntry($owner, '*@owned-2.example');
-        $otherEntry = new BlocklistEntry($other, '*@other.example');
+        $firstEntry = new BlocklistEntry('*@bulk-1.example');
+        $secondEntry = new BlocklistEntry('*@bulk-2.example');
+        $keptEntry = new BlocklistEntry('*@bulk-kept.example');
 
-        $this->entityManager->persist($ownerEntry1);
-        $this->entityManager->persist($ownerEntry2);
-        $this->entityManager->persist($otherEntry);
+        $this->entityManager->persist($firstEntry);
+        $this->entityManager->persist($secondEntry);
+        $this->entityManager->persist($keptEntry);
         $this->entityManager->flush();
 
-        $token = $this->login('blocklist-bulk-owner@example.com', 'Str0ngPassw0rd!@#');
+        $token = $this->login('blocklist-bulk@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
             method: 'DELETE',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: [
                 'ids' => [
-                    $ownerEntry1->getId()?->toRfc4122(),
-                    $ownerEntry2->getId()?->toRfc4122(),
+                    $firstEntry->getId()?->toRfc4122(),
+                    $secondEntry->getId()?->toRfc4122(),
                 ],
             ],
             headers: $this->authorizeHeaders($token),
@@ -203,39 +204,34 @@ final class BlocklistEndpointsTest extends ApiIntegrationTestCase
         $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame(2, $payload['deletedCount'] ?? null);
 
-        self::assertNull($this->entityManager->getRepository(BlocklistEntry::class)->find($ownerEntry1->getId()));
-        self::assertNull($this->entityManager->getRepository(BlocklistEntry::class)->find($ownerEntry2->getId()));
-        self::assertNotNull($this->entityManager->getRepository(BlocklistEntry::class)->find($otherEntry->getId()));
+        self::assertNull($this->entityManager->getRepository(BlocklistEntry::class)->find($firstEntry->getId()));
+        self::assertNull($this->entityManager->getRepository(BlocklistEntry::class)->find($secondEntry->getId()));
+        self::assertNotNull($this->entityManager->getRepository(BlocklistEntry::class)->find($keptEntry->getId()));
     }
 
-    public function testBlocklistBulkDeleteRejectsWhenAnyEntryIsNotOwnedByAuthenticatedUser(): void
+    public function testBlocklistBulkDeleteDeletesNothingWhenAnEntryDoesNotExist(): void
     {
-        $owner = $this->createAccount('blocklist-bulk-owner-2@example.com', 'Str0ngPassw0rd!@#');
-        $other = $this->createAccount('blocklist-bulk-other-2@example.com', 'Str0ngPassw0rd!@#');
+        $this->createAccount('blocklist-bulk-missing@example.com', 'Str0ngPassw0rd!@#');
 
-        $ownerEntry = new BlocklistEntry($owner, '*@owned.example');
-        $otherEntry = new BlocklistEntry($other, '*@other.example');
-
-        $this->entityManager->persist($ownerEntry);
-        $this->entityManager->persist($otherEntry);
+        $entry = new BlocklistEntry('*@bulk-missing.example');
+        $this->entityManager->persist($entry);
         $this->entityManager->flush();
 
-        $token = $this->login('blocklist-bulk-owner-2@example.com', 'Str0ngPassw0rd!@#');
+        $token = $this->login('blocklist-bulk-missing@example.com', 'Str0ngPassw0rd!@#');
 
         $response = $this->requestJson(
             method: 'DELETE',
-            uri: '/v1/user/blocklist',
+            uri: '/v1/blocklist',
             payload: [
                 'ids' => [
-                    $ownerEntry->getId()?->toRfc4122(),
-                    $otherEntry->getId()?->toRfc4122(),
+                    $entry->getId()?->toRfc4122(),
+                    '00000000-0000-7000-8000-000000000000',
                 ],
             ],
             headers: $this->authorizeHeaders($token),
         );
 
-        self::assertSame(403, $response->getStatusCode(), (string) $response->getContent());
-        self::assertNotNull($this->entityManager->getRepository(BlocklistEntry::class)->find($ownerEntry->getId()));
-        self::assertNotNull($this->entityManager->getRepository(BlocklistEntry::class)->find($otherEntry->getId()));
+        self::assertSame(404, $response->getStatusCode(), (string) $response->getContent());
+        self::assertNotNull($this->entityManager->getRepository(BlocklistEntry::class)->find($entry->getId()));
     }
 }

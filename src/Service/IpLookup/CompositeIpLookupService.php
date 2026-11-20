@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\IpLookup;
 
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use App\Service\Platform\PlatformSettingsProvider;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
@@ -16,8 +16,7 @@ final readonly class CompositeIpLookupService implements IpLookupInterface
         private IpWhoisLookupService $ipWhoisLookup,
         private RdapLookupService $rdapLookup,
         private CacheInterface $ipLookupCachePool,
-        #[Autowire(env: 'bool:APP_IP_LOOKUP_ENABLED')]
-        private bool $enabled,
+        private PlatformSettingsProvider $settings,
     ) {}
 
     #[\Override]
@@ -30,7 +29,7 @@ final readonly class CompositeIpLookupService implements IpLookupInterface
         // A lookup sends the address to ipwho.is and to the regional internet
         // registry that holds it. Switched off, nothing leaves the server and
         // records keep the bare address.
-        if (!$this->enabled) {
+        if (!$this->settings->ipLookupEnabled()) {
             return [
                 'name' => null,
                 'country' => null,

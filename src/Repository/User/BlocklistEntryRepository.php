@@ -6,7 +6,6 @@ namespace App\Repository\User;
 
 use App\DTO\Input\Common\Pagination;
 use App\Entity\User\BlocklistEntry;
-use App\Entity\User\User;
 use App\Repository\PaginationAwareTrait;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\Tools\Pagination\Paginator;
@@ -26,25 +25,18 @@ class BlocklistEntryRepository extends ServiceEntityRepository
         parent::__construct($registry, BlocklistEntry::class);
     }
 
-    public function getBlocklistEntriesForUserPaginated(User $user, Pagination $pagination): Paginator
+    public function getBlocklistEntriesPaginated(Pagination $pagination): Paginator
     {
-        $queryBuilder = $this->createQueryBuilder('b')
-            ->where('IDENTITY(b.user) = :userId')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
-        ;
-
-        return $this->paginate($pagination, $queryBuilder);
+        return $this->paginate($pagination, $this->createQueryBuilder('b'));
     }
 
     /**
      * @return BlocklistEntry[]
      */
-    public function getBlocklistEntriesForUser(User $user): array
+    public function getBlocklistEntries(): array
     {
         return $this->createQueryBuilder('b')
-            ->where('IDENTITY(b.user) = :userId')
             ->orderBy('b.id', 'ASC')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
             ->getQuery()
             ->getResult()
         ;
@@ -67,7 +59,7 @@ class BlocklistEntryRepository extends ServiceEntityRepository
      *
      * @return list<BlocklistEntry>
      */
-    public function getEntriesByIdsForUser(User $user, array $entryIds): array
+    public function getEntriesByIds(array $entryIds): array
     {
         if ([] === $entryIds) {
             return [];
@@ -76,9 +68,7 @@ class BlocklistEntryRepository extends ServiceEntityRepository
         $entries = [];
         foreach ($entryIds as $entryId) {
             $entry = $this->createQueryBuilder('b')
-                ->andWhere('IDENTITY(b.user) = :userId')
                 ->andWhere('b.id = :entryId')
-                ->setParameter('userId', $user->getId(), UuidType::NAME)
                 ->setParameter('entryId', Uuid::fromString($entryId), UuidType::NAME)
                 ->getQuery()
                 ->getOneOrNullResult()

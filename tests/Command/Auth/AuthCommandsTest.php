@@ -7,20 +7,13 @@ namespace App\Tests\Command\Auth;
 use App\Command\User\CreateUserCommand;
 use App\Command\User\DeleteUserCommand;
 use App\Command\User\DisableTwoFactorCommand;
-use App\Command\User\ProcessUserDailyBulkCommand;
-use App\Command\User\ProcessUserDailyCommand;
-use App\Command\User\ProcessUserHourlyBulkCommand;
-use App\Command\User\ProcessUserHourlyCommand;
-use App\Command\User\ProcessUserWeeklyBulkCommand;
-use App\Command\User\ProcessUserWeeklyCommand;
 use App\Command\User\ResetUserPasswordCommand;
+use App\Command\User\SendWeeklyOverviewCommand;
+use App\Entity\DMARC\Domain;
 use App\Entity\User\User;
 use App\Enum\User\TwoFactorMethod;
-use App\Message\User\ProcessUserDaily;
-use App\Message\User\ProcessUserHourly;
-use App\Message\User\ProcessUserWeekly;
+use App\Message\User\SendWeeklyOverview;
 use App\Repository\User\UserRepository;
-use App\Service\User\UserDeleteProcessor;
 use App\Service\User\UserFactory;
 use App\Tests\Api\ApiIntegrationTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -38,17 +31,13 @@ use Symfony\Component\Uid\Uuid;
 #[CoversClass(CreateUserCommand::class)]
 #[CoversClass(DeleteUserCommand::class)]
 #[CoversClass(DisableTwoFactorCommand::class)]
-#[CoversClass(ProcessUserDailyCommand::class)]
-#[CoversClass(ProcessUserDailyBulkCommand::class)]
-#[CoversClass(ProcessUserHourlyCommand::class)]
-#[CoversClass(ProcessUserHourlyBulkCommand::class)]
-#[CoversClass(ProcessUserWeeklyCommand::class)]
-#[CoversClass(ProcessUserWeeklyBulkCommand::class)]
 #[CoversClass(ResetUserPasswordCommand::class)]
+#[CoversClass(SendWeeklyOverviewCommand::class)]
 final class AuthCommandsTest extends ApiIntegrationTestCase
 {
     public function testCreateUserCommandCreatesUser(): void
     {
+        $this->removeAccounts();
         $email = 'cmd-create-'.uniqid('', true).'@example.com';
 
         $command = new CreateUserCommand(
@@ -66,6 +55,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testCreateUserCommandStillAcceptsTheSimpleOption(): void
     {
+        $this->removeAccounts();
         $email = 'cmd-simple-'.uniqid('', true).'@example.com';
 
         $command = new CreateUserCommand(
@@ -88,6 +78,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
     public function testCreateUserCommandAsksAgainForATooShortPassword(): void
     {
+        $this->removeAccounts();
         $email = 'cmd-short-'.uniqid('', true).'@example.com';
 
         $command = new CreateUserCommand(
@@ -104,10 +95,9 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertNotNull(self::getContainer()->get(UserRepository::class)->findOneBy(['email' => $email]));
     }
 
-    public function testCreateUserCommandFailsWhenUserExists(): void
+    public function testCreateUserCommandRefusesASecondAccount(): void
     {
-        $email = 'cmd-existing-'.uniqid('', true).'@example.com';
-        $this->createAccount($email, 'Str0ngPassw0rd!@#');
+        $this->createAccount('cmd-existing-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
         $command = new CreateUserCommand(
             self::getContainer()->get(UserFactory::class),
@@ -115,11 +105,11 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         );
 
         $tester = new CommandTester($command);
-        $tester->setInputs([$email]);
         $tester->execute([]);
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('already exists', $tester->getDisplay());
+        self::assertStringContainsString('DMARCo has one account, and it already exists.', $tester->getDisplay());
+        self::assertStringNotContainsString('Email', $tester->getDisplay());
     }
 
     public function testDeleteUserCommandSuccess(): void
@@ -129,7 +119,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
         $command = new DeleteUserCommand(
             self::getContainer()->get(UserRepository::class),
-            self::getContainer()->get(UserDeleteProcessor::class),
+            $this->createStub(LoggerInterface::class),
         );
 
         $tester = new CommandTester($command);
@@ -144,7 +134,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
     {
         $command = new DeleteUserCommand(
             self::getContainer()->get(UserRepository::class),
-            self::getContainer()->get(UserDeleteProcessor::class),
+            $this->createStub(LoggerInterface::class),
         );
 
         $tester = new CommandTester($command);
@@ -154,12 +144,11 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
     }
 
-    public function testDeleteUserCommandFailsWhenProcessorFails(): void
+    public function testDeleteUserCommandFailsWhenTheDeleteFails(): void
     {
         $user = (new User())
             ->setEmail('cmd-delete-fail@example.com')
             ->setName('Delete Fail')
-            ->setSharedPostboxIdentifierToken('cmd-delete-fail-token')
         ;
 
         $userRepository = $this->createMock(UserRepository::class);
@@ -171,12 +160,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         ;
         $userRepository->expects(self::once())->method('delete')->with($user)->willThrowException(new \RuntimeException());
 
-        $processor = new UserDeleteProcessor(
-            $userRepository,
-            $this->createStub(LoggerInterface::class),
-        );
-
-        $command = new DeleteUserCommand($userRepository, $processor);
+        $command = new DeleteUserCommand($userRepository, $this->createStub(LoggerInterface::class));
 
         $tester = new CommandTester($command);
         $tester->setInputs(['cmd-delete-fail@example.com']);
@@ -186,346 +170,43 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         self::assertStringContainsString('Failed to delete user.', $tester->getDisplay());
     }
 
-    public function testProcessUserDailyCommandDispatches(): void
+    public function testDeleteUserCommandKeepsTheReports(): void
     {
-        $user = $this->createAccount('cmd-daily-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $email = 'cmd-delete-keeps-'.uniqid('', true).'@example.com';
+        $this->createAccount($email, 'Str0ngPassw0rd!@#');
+        $domain = new Domain('kept-'.uniqid('', true).'.example');
+        $this->entityManager->persist($domain);
+        $this->entityManager->flush();
 
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserDaily $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserDailyCommand(
+        $command = new DeleteUserCommand(
             self::getContainer()->get(UserRepository::class),
-            $messageBus
+            $this->createStub(LoggerInterface::class),
         );
 
         $tester = new CommandTester($command);
-        $tester->execute(['id' => $user->getId()->toRfc4122()]);
+        $tester->setInputs([$email]);
+        $tester->execute([]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        $this->entityManager->clear();
+        self::assertNotNull($this->entityManager->getRepository(Domain::class)->find($domain->getId()));
     }
 
-    public function testProcessUserDailyCommandPromptsForId(): void
+    public function testSendWeeklyOverviewCommandDispatches(): void
     {
-        $user = $this->createAccount('cmd-daily-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
         $messageBus = $this->createMock(MessageBusInterface::class);
         $messageBus
             ->expects(self::once())
             ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserDaily $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
+            ->with(self::isInstanceOf(SendWeeklyOverview::class))
             ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
         ;
 
-        $command = new ProcessUserDailyCommand(
-            self::getContainer()->get(UserRepository::class),
-            $messageBus,
-        );
-
-        $tester = new CommandTester($command);
-        $tester->setInputs([$user->getId()->toRfc4122()]);
+        $tester = new CommandTester(new SendWeeklyOverviewCommand($messageBus));
         $tester->execute([]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserDailyCommandFailsWhenMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(null);
-
-        $command = new ProcessUserDailyCommand($userRepository, $this->createStub(MessageBusInterface::class));
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'missing']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserDailyCommandFailsWhenUserIdIsMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(new User());
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus->expects(self::never())->method('dispatch');
-
-        $command = new ProcessUserDailyCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'existing-user-without-id']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserDailyBulkCommandDispatches(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn(['id-1', 'id-2']);
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::exactly(2))
-            ->method('dispatch')
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserDailyBulkCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserDailyBulkCommandNoUsers(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn([]);
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus->expects(self::never())->method('dispatch');
-
-        $command = new ProcessUserDailyBulkCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralCommandDispatches(): void
-    {
-        $user = $this->createAccount('cmd-general-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserHourly $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserHourlyCommand(
-            self::getContainer()->get(UserRepository::class),
-            $messageBus
-        );
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => $user->getId()->toRfc4122()]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralCommandPromptsForId(): void
-    {
-        $user = $this->createAccount('cmd-general-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserHourly $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserHourlyCommand(
-            self::getContainer()->get(UserRepository::class),
-            $messageBus,
-        );
-
-        $tester = new CommandTester($command);
-        $tester->setInputs([$user->getId()->toRfc4122()]);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralCommandFailsWhenMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(null);
-
-        $command = new ProcessUserHourlyCommand($userRepository, $this->createStub(MessageBusInterface::class));
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'missing']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralCommandFailsWhenUserIdIsMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(new User());
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus->expects(self::never())->method('dispatch');
-
-        $command = new ProcessUserHourlyCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'existing-user-without-id']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralBulkCommandDispatches(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn(['id-1']);
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserHourlyBulkCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserGeneralBulkCommandSucceedsWhenNoUsers(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn([]);
-
-        $command = new ProcessUserHourlyBulkCommand($userRepository, $this->createStub(MessageBusInterface::class));
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyCommandDispatches(): void
-    {
-        $user = $this->createAccount('cmd-weekly-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserWeekly $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserWeeklyCommand(
-            self::getContainer()->get(UserRepository::class),
-            $messageBus,
-        );
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => $user->getId()->toRfc4122()]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyCommandPromptsForId(): void
-    {
-        $user = $this->createAccount('cmd-weekly-prompt-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::once())
-            ->method('dispatch')
-            ->with(self::callback(static function (ProcessUserWeekly $message) use ($user): bool {
-                return $message->userId === $user->getId()->toRfc4122();
-            }))
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserWeeklyCommand(
-            self::getContainer()->get(UserRepository::class),
-            $messageBus,
-        );
-
-        $tester = new CommandTester($command);
-        $tester->setInputs([$user->getId()->toRfc4122()]);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyCommandFailsWhenMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(null);
-
-        $command = new ProcessUserWeeklyCommand($userRepository, $this->createStub(MessageBusInterface::class));
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'missing']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyCommandFailsWhenUserIdIsMissing(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('find')->willReturn(new User());
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus->expects(self::never())->method('dispatch');
-
-        $command = new ProcessUserWeeklyCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute(['id' => 'existing-user-without-id']);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyBulkCommandDispatches(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn(['id-1', 'id-2']);
-
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $messageBus
-            ->expects(self::exactly(2))
-            ->method('dispatch')
-            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
-        ;
-
-        $command = new ProcessUserWeeklyBulkCommand($userRepository, $messageBus);
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-    }
-
-    public function testProcessUserWeeklyBulkCommandNoUsers(): void
-    {
-        $userRepository = $this->createStub(UserRepository::class);
-        $userRepository->method('getAllUserIds')->willReturn([]);
-
-        $command = new ProcessUserWeeklyBulkCommand($userRepository, $this->createStub(MessageBusInterface::class));
-
-        $tester = new CommandTester($command);
-        $tester->execute([]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertSame('app:weekly-overview:send', new SendWeeklyOverviewCommand($messageBus)->getName());
     }
 
     public function testResetUserPasswordCommandHashesPassword(): void
@@ -600,26 +281,6 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $tester->execute([]);
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-    }
-
-    public function testCommandDefinitionsAreConfigured(): void
-    {
-        $processDaily = new ProcessUserDailyCommand(
-            self::getContainer()->get(UserRepository::class),
-            self::getContainer()->get(MessageBusInterface::class),
-        );
-        $processGeneral = new ProcessUserHourlyCommand(
-            self::getContainer()->get(UserRepository::class),
-            self::getContainer()->get(MessageBusInterface::class),
-        );
-        $processGeneralBulk = new ProcessUserHourlyBulkCommand(
-            self::getContainer()->get(UserRepository::class),
-            self::getContainer()->get(MessageBusInterface::class),
-        );
-
-        self::assertTrue($processDaily->getDefinition()->hasArgument('id'));
-        self::assertTrue($processGeneral->getDefinition()->hasArgument('id'));
-        self::assertTrue($processGeneralBulk->getDefinition()->hasOption('limit'));
     }
 
     private function setEntityId(object $entity, Uuid $id): void

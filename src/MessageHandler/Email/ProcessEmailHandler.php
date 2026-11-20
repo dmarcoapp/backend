@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\MessageHandler\Email;
 
+use App\DTO\Input\DMARC\ReportXML\ReportMetadata;
 use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Helper\Int32;
 use App\Message\DMARC\ProcessReport;
 use App\Message\Email\ProcessEmail;
@@ -28,7 +28,7 @@ use Symfony\Component\String\ByteString;
 final readonly class ProcessEmailHandler
 {
     private const array SUPPORTED_EXTENSIONS = ['xml'];
-    private const int USER_LOCK_NAMESPACE = 204958833;
+    private const int DOMAIN_LOCK_NAMESPACE = 204958833;
 
     public function __construct(
         private EmailRepository $emailRepository,
@@ -68,11 +68,6 @@ final readonly class ProcessEmailHandler
             return;
         }
 
-        $owner = $email->getOwner();
-        if (null === $owner) {
-            throw new \LogicException('Email owner is missing.');
-        }
-
         $xmlContent = $email->getAttachmentContent();
         if (null === $xmlContent) {
             // The report took the XML over in an earlier run, which then failed
@@ -95,14 +90,6 @@ final readonly class ProcessEmailHandler
             return;
         }
 
-        if (!str_starts_with(ltrim($xmlContent), '<?xml')) {
-            $this->logger->error('Invalid XML content (Dumb check).', [
-                'emailId' => $emailId->toRfc4122(),
-            ]);
-
-            return;
-        }
-
         if (false === $this->reportXMLProcessor->validate($xmlContent)) {
             $this->logger->error('DMARC Report XML is not valid.', [
                 'emailId' => $emailId->toRfc4122(),
@@ -117,23 +104,45 @@ final readonly class ProcessEmailHandler
             throw new UnrecoverableMessageHandlingException('Failed to deserialize report XML.', previous: $e);
         }
 
+        $metadata = $feedback->getReportMetadata();
         $reportDomain = $feedback->getPolicyPublished()->getDomain();
-        $this->lockUserProcessing($owner);
-
-        try {
-            $existingDomain = $this->domainRepository->findOneBy([
-                'user' => $owner,
-                'domain' => $reportDomain,
-            ]);
-
-            if (null === $existingDomain) {
-                $this->entityManager->persist(new Domain($owner, $reportDomain));
-            }
-        } finally {
-            $this->unlockUserProcessing($owner);
+        $beginDate = \DateTimeImmutable::createFromFormat('U', (string) $metadata->getDateRange()->getBegin());
+        if (false === $beginDate) {
+            throw new UnrecoverableMessageHandlingException('Report begin date is invalid.');
         }
 
-        $report = $this->createReportForEmail($email, $xmlContent);
+        // One report at a time for each domain, so that two copies of the same
+        // report, or two first reports for a new domain, cannot both pass the
+        // checks below before either of them is saved.
+        $this->lockDomain($reportDomain);
+
+        try {
+            $copyOf = $this->reportRepository->findOneBy([
+                'beginDate' => $beginDate,
+                'domain' => $reportDomain,
+                'reportId' => $metadata->getReportId(),
+                'reportingOrganization' => $metadata->getOrgName(),
+            ]);
+            if (null !== $copyOf && $copyOf->getEmail() !== $email) {
+                $this->logger->info('Report already received, dropping the copy.', [
+                    'emailId' => $emailId->toRfc4122(),
+                    'reportId' => $copyOf->getId()?->toRfc4122(),
+                ]);
+                $this->entityManager->remove($email);
+                $this->entityManager->flush();
+
+                return;
+            }
+
+            if (null === $this->domainRepository->findOneBy(['domain' => $reportDomain])) {
+                $this->entityManager->persist(new Domain($reportDomain));
+            }
+
+            $report = $this->createReportForEmail($email, $xmlContent, $metadata, $reportDomain, $beginDate);
+        } finally {
+            $this->unlockDomain($reportDomain);
+        }
+
         $reportId = $report->getId();
         if (null === $reportId) {
             throw new \LogicException('Report ID is missing.');
@@ -144,8 +153,13 @@ final readonly class ProcessEmailHandler
         );
     }
 
-    private function createReportForEmail(Email $email, string $xmlContent): Report
-    {
+    private function createReportForEmail(
+        Email $email,
+        string $xmlContent,
+        ReportMetadata $metadata,
+        string $reportDomain,
+        \DateTimeImmutable $beginDate,
+    ): Report {
         $report = $this->reportRepository->findOneBy(['email' => $email]);
         if (!$report) {
             $report = new Report()
@@ -154,7 +168,15 @@ final readonly class ProcessEmailHandler
             $this->entityManager->persist($report);
         }
 
-        $report->setRawXML($xmlContent);
+        // What tells one report from another is known from here on, so a copy
+        // that arrives before this one is processed is still recognized.
+        $report
+            ->setRawXML($xmlContent)
+            ->setReportingOrganization($metadata->getOrgName())
+            ->setReportId($metadata->getReportId())
+            ->setDomain($reportDomain)
+            ->setBeginDate($beginDate)
+        ;
         // The report holds the XML from here on, so the email lets go of its copy.
         $email->setAttachmentContent(null);
 
@@ -163,44 +185,34 @@ final readonly class ProcessEmailHandler
         return $report;
     }
 
-    private function lockUserProcessing(User $owner): void
+    private function lockDomain(string $domain): void
     {
-        $ownerId = $owner->getId();
-        if (null === $ownerId) {
-            throw new \LogicException('User ID is missing for report processing lock.');
-        }
-
         $connection = $this->entityManager->getConnection();
         if (!$this->isPostgreSql($connection)) {
             return;
         }
 
         $connection->executeQuery(
-            'SELECT pg_advisory_lock(:namespace, :userKey)',
+            'SELECT pg_advisory_lock(:namespace, :domainKey)',
             [
-                'namespace' => self::USER_LOCK_NAMESPACE,
-                'userKey' => Int32::toSigned(crc32($ownerId->toRfc4122())),
+                'domainKey' => Int32::toSigned(crc32($domain)),
+                'namespace' => self::DOMAIN_LOCK_NAMESPACE,
             ]
         );
     }
 
-    private function unlockUserProcessing(User $owner): void
+    private function unlockDomain(string $domain): void
     {
-        $ownerId = $owner->getId();
-        if (null === $ownerId) {
-            return;
-        }
-
         $connection = $this->entityManager->getConnection();
         if (!$this->isPostgreSql($connection)) {
             return;
         }
 
         $connection->executeQuery(
-            'SELECT pg_advisory_unlock(:namespace, :userKey)',
+            'SELECT pg_advisory_unlock(:namespace, :domainKey)',
             [
-                'namespace' => self::USER_LOCK_NAMESPACE,
-                'userKey' => Int32::toSigned(crc32($ownerId->toRfc4122())),
+                'domainKey' => Int32::toSigned(crc32($domain)),
+                'namespace' => self::DOMAIN_LOCK_NAMESPACE,
             ]
         );
     }

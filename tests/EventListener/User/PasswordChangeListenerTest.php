@@ -25,7 +25,6 @@ final class PasswordChangeListenerTest extends TestCase
         $user
             ->setEmail('user@example.com')
             ->setName('User')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         $mailer = $this->createMock(MailerInterface::class);
@@ -44,7 +43,6 @@ final class PasswordChangeListenerTest extends TestCase
         $user = new User();
         $user
             ->setName('User')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         $mailer = $this->createMock(MailerInterface::class);

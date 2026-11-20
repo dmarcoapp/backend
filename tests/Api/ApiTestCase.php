@@ -19,18 +19,12 @@ abstract class ApiTestCase extends KernelTestCase
         $_SERVER['APP_ENV'] = 'test';
         $_SERVER['APP_DEBUG'] = '1';
         $_SERVER['DATABASE_URL'] = 'sqlite:///'.\dirname(__DIR__, 2).'/var/test.db';
-        $_SERVER['APP_REGISTRATION_ENABLED'] = 'true';
-        $_SERVER['APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN'] = 'aggregate-reports.example.test';
         $_ENV['APP_ENV'] = 'test';
         $_ENV['APP_DEBUG'] = '1';
         $_ENV['DATABASE_URL'] = 'sqlite:///'.\dirname(__DIR__, 2).'/var/test.db';
-        $_ENV['APP_REGISTRATION_ENABLED'] = 'true';
-        $_ENV['APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN'] = 'aggregate-reports.example.test';
         putenv('APP_ENV=test');
         putenv('APP_DEBUG=1');
         putenv('DATABASE_URL=sqlite:///'.\dirname(__DIR__, 2).'/var/test.db');
-        putenv('APP_REGISTRATION_ENABLED=true');
-        putenv('APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN=aggregate-reports.example.test');
 
         $options['environment'] = 'test';
         $options['debug'] = true;

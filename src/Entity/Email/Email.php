@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Entity\Email;
 
 use App\Entity\DMARC\Report;
-use App\Entity\User\User;
+use App\Entity\Intake\ApiIntakeKey;
+use App\Entity\Intake\Mailbox;
+use App\Enum\Email\ReportSource;
 use App\Repository\Email\EmailRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -49,9 +51,23 @@ class Email
     #[ORM\OneToOne(mappedBy: 'email', cascade: ['persist', 'remove'])]
     private ?Report $report = null;
 
-    #[ORM\ManyToOne(inversedBy: 'emails')]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?User $owner = null;
+    /**
+     * Null only on emails stored before the source was recorded, which all
+     * came through the mail gateway.
+     */
+    #[ORM\Column(length: 16, nullable: true, enumType: ReportSource::class)]
+    private ?ReportSource $source = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?Mailbox $mailbox = null;
+
+    #[ORM\Column(type: Types::BIGINT, nullable: true)]
+    private int|string|null $imapUid = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?ApiIntakeKey $apiKey = null;
 
     public function getId(): ?Uuid
     {
@@ -164,14 +180,44 @@ class Email
         return $this;
     }
 
-    public function getOwner(): ?User
+    public function getSource(): ?ReportSource
     {
-        return $this->owner;
+        return $this->source;
     }
 
-    public function setOwner(?User $owner): static
+    public function setSource(?ReportSource $source): static
     {
-        $this->owner = $owner;
+        $this->source = $source;
+
+        return $this;
+    }
+
+    public function getMailbox(): ?Mailbox
+    {
+        return $this->mailbox;
+    }
+
+    public function getImapUid(): ?int
+    {
+        return null === $this->imapUid ? null : (int) $this->imapUid;
+    }
+
+    public function setMailbox(?Mailbox $mailbox, ?int $imapUid = null): static
+    {
+        $this->mailbox = $mailbox;
+        $this->imapUid = $imapUid;
+
+        return $this;
+    }
+
+    public function getApiKey(): ?ApiIntakeKey
+    {
+        return $this->apiKey;
+    }
+
+    public function setApiKey(?ApiIntakeKey $apiKey): static
+    {
+        $this->apiKey = $apiKey;
 
         return $this;
     }

@@ -9,7 +9,6 @@ use App\DTO\Output\Common\PaginationApi;
 use App\DTO\Output\Common\PaginationMetaApi;
 use App\DTO\Output\DMARC\DomainApi;
 use App\Entity\DMARC\Domain;
-use App\Entity\User\User;
 use App\Repository\DMARC\DomainRepository;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -18,7 +17,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfonycasts\MicroMapper\MicroMapperInterface;
 
@@ -31,8 +29,8 @@ final class DomainController extends AbstractController
     ) {}
 
     #[OA\Get(
-        description: 'The domain list is an aggregation of the user\'s dmarc reports.',
-        summary: 'Gets a list of domains for the authenticated user.',
+        description: 'The domain list is an aggregation of the dmarc reports.',
+        summary: 'Gets the list of domains.',
         security: [['Bearer' => []]],
     )]
     #[OA\Response(
@@ -60,10 +58,8 @@ final class DomainController extends AbstractController
     public function list(
         #[MapQueryString]
         Pagination $pagination,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
-        $paginator = $this->repository->getDomainsForUserPaginated($user, $pagination);
+        $paginator = $this->repository->getDomainsPaginated($pagination);
 
         return new JsonResponse(
             new PaginationApi(
@@ -86,16 +82,7 @@ final class DomainController extends AbstractController
     #[Route('/v1/dmarc/domains/{domain}', name: 'app_domains_get', methods: [Request::METHOD_GET])]
     public function get(
         Domain $domain,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
-        $domainUserId = $domain->getUser()->getId();
-        $userId = $user->getId();
-
-        if (!$domainUserId || !$userId || !$domainUserId->equals($userId)) {
-            throw $this->createAccessDeniedException();
-        }
-
         return new JsonResponse(
             $this->microMapper->map($domain, DomainApi::class)
         );

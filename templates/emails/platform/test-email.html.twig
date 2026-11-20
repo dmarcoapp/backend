@@ -1,0 +1,12 @@
+{% extends 'emails/base.html.twig' %}
+{% import 'emails/macros.html.twig' as ui %}
+
+{% block preheader %}Outgoing mail works.{% endblock %}
+
+{% block content %}
+    {{ ui.title('Outgoing mail works') }}
+
+    <p style="margin: 0 0 16px 0;">
+        This is the test email sent from the Platform page of DMARCo. It arrived, so the mail server settings are right, and DMARCo can send you its notifications.
+    </p>
+{% endblock %}

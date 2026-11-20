@@ -23,5 +23,7 @@ framework:
                 adapter: cache.adapter.redis
             dashboard_cache_pool:
                 adapter: cache.adapter.redis
+            report_intake_rate_limiter_pool:
+                adapter: cache.adapter.redis
             ip_lookup_cache_pool:
                 adapter: cache.adapter.redis

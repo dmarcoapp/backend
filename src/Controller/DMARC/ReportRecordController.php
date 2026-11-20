@@ -10,7 +10,6 @@ use App\DTO\Output\Common\PaginationMetaApi;
 use App\DTO\Output\DMARC\ReportRecordApi;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
-use App\Entity\User\User;
 use App\Repository\DMARC\ReportRecordRepository;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -19,9 +18,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Uid\Uuid;
 use Symfonycasts\MicroMapper\MicroMapperInterface;
 
 #[IsGranted('ROLE_USER')]
@@ -62,22 +59,7 @@ final class ReportRecordController extends AbstractController
         Report $report,
         #[MapQueryString]
         Pagination $pagination,
-        #[CurrentUser]
-        User $user,
     ): JsonResponse {
-        $reportEmail = $report->getEmail();
-        $reportOwner = $reportEmail?->getOwner();
-        $reportOwnerId = $reportOwner?->getId();
-        $userId = $user->getId();
-
-        if (
-            !$reportOwnerId instanceof Uuid
-            || !$userId instanceof Uuid
-            || !$reportOwnerId->equals($userId)
-        ) {
-            throw $this->createAccessDeniedException();
-        }
-
         $paginator = $this->repository->getReportRecordsForReportPaginated($report, $pagination);
 
         return new JsonResponse(

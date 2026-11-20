@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Service\Email;
 
-use App\Entity\User\User;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use App\Service\Platform\PlatformSettingsProvider;
 
 final readonly class AggregateReportPostboxAddressProvider
 {
     public function __construct(
-        #[Autowire(env: 'APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN')]
-        private string $dmarcAggregateReportEmailReceiverDomain,
+        private PlatformSettingsProvider $settings,
     ) {}
 
-    public function getAddressForUser(User $user): string
+    /**
+     * The address reports are sent to, or null while there is no report domain.
+     */
+    public function getAddress(): ?string
     {
-        return sprintf('%s@%s', $user->getSharedPostboxIdentifierToken(), $this->dmarcAggregateReportEmailReceiverDomain);
+        $domain = $this->settings->reportAddressDomain();
+
+        return null === $domain ? null : sprintf('%s@%s', $this->settings->reportAddressToken(), $domain);
     }
 }

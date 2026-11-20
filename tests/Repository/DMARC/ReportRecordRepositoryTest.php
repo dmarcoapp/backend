@@ -65,7 +65,6 @@ final class ReportRecordRepositoryTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();

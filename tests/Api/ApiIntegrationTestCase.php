@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
+use App\Entity\DMARC\Domain;
+use App\Entity\DMARC\Report;
+use App\Entity\DMARC\ReportRecord;
+use App\Entity\Email\Email;
 use App\Entity\User\User;
 use App\Service\User\TwoFactor\TwoFactorService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -51,8 +55,6 @@ abstract class ApiIntegrationTestCase extends ApiTestCase
         $user
             ->setEmail($email)
             ->setName($name)
-            ->setRoles(['ROLE_USER'])
-            ->setSharedPostboxIdentifierToken(ByteString::fromRandom(32, 'abcdefghijklmnopqrstuvwxyz0123456789')->toString())
         ;
 
         $passwordHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
@@ -62,6 +64,28 @@ abstract class ApiIntegrationTestCase extends ApiTestCase
         $this->entityManager->flush();
 
         return $user;
+    }
+
+    /**
+     * The tests of one class share a database, and DMARCo creates its account
+     * only on an installation that has none yet.
+     */
+    protected function removeAccounts(): void
+    {
+        $this->entityManager->createQuery('DELETE FROM '.User::class)->execute();
+        $this->entityManager->clear();
+    }
+
+    /**
+     * Reports and domains belong to the whole installation, so a test that
+     * counts them starts from none.
+     */
+    protected function removeReportData(): void
+    {
+        foreach ([ReportRecord::class, Report::class, Email::class, Domain::class] as $entityClass) {
+            $this->entityManager->createQuery('DELETE FROM '.$entityClass)->execute();
+        }
+        $this->entityManager->clear();
     }
 
     protected function authorizeHeaders(string $token): array

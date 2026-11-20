@@ -9,13 +9,11 @@ use App\DTO\Input\Common\Pagination;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Enum\DMARC\DispositionType;
 use App\Enum\DMARC\DKIMAlign;
 use App\Enum\DMARC\SPFAlign;
 use App\Enum\DMARC\SPFResult;
 use App\Repository\DMARC\ReportRecordRepository;
-use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfonycasts\MicroMapper\MicroMapperInterface;
 
 /**
@@ -25,10 +23,9 @@ use Symfonycasts\MicroMapper\MicroMapperInterface;
  */
 final class ReportRecordControllerTest extends ApiIntegrationTestCase
 {
-    public function testListByReportReturnsRecordsForOwner(): void
+    public function testListByReportReturnsTheRecords(): void
     {
-        $user = $this->createAccount('records-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $report = $this->createReportWithRecord($user);
+        $report = $this->createReportWithRecord();
         $recordRepository = self::getContainer()->get(ReportRecordRepository::class);
         self::assertCount(1, $recordRepository->findBy(['report' => $report]));
 
@@ -40,7 +37,6 @@ final class ReportRecordControllerTest extends ApiIntegrationTestCase
         $response = $controller->listByReport(
             $report,
             new Pagination(page: 1, pageSize: 5),
-            $user
         );
 
         $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
@@ -48,28 +44,7 @@ final class ReportRecordControllerTest extends ApiIntegrationTestCase
         self::assertArrayHasKey('meta', $payload);
     }
 
-    public function testListByReportRejectsNonOwner(): void
-    {
-        $owner = $this->createAccount('owner-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $report = $this->createReportWithRecord($owner);
-
-        $otherUser = $this->createAccount('other-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $controller = new ReportRecordController(
-            self::getContainer()->get(MicroMapperInterface::class),
-            self::getContainer()->get(ReportRecordRepository::class)
-        );
-
-        $this->expectException(AccessDeniedException::class);
-
-        $controller->listByReport(
-            $report,
-            new Pagination(page: 1, pageSize: 5),
-            $otherUser
-        );
-    }
-
-    private function createReportWithRecord(User $user): Report
+    private function createReportWithRecord(): Report
     {
         $email = new Email();
         $email
@@ -79,7 +54,6 @@ final class ReportRecordControllerTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();

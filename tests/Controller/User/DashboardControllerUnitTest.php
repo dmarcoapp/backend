@@ -7,15 +7,12 @@ namespace App\Tests\Controller\User;
 use App\Controller\User\DashboardController;
 use App\DTO\Input\DMARC\DashboardSettings;
 use App\DTO\Output\User\Dashboard;
-use App\Entity\User\User;
 use App\Repository\DMARC\DomainRepository;
 use App\Repository\DMARC\ReportRepository;
 use App\Service\User\DashboardMetricsProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Security\Core\Exception\AccessDeniedException;
-use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
@@ -25,36 +22,8 @@ use Symfony\Contracts\Cache\ItemInterface;
 #[CoversClass(DashboardController::class)]
 final class DashboardControllerUnitTest extends TestCase
 {
-    public function testGetThrowsWhenUserIdMissing(): void
-    {
-        $user = new User();
-        $user
-            ->setEmail('dashboard@example.com')
-            ->setName('Dashboard User')
-            ->setSharedPostboxIdentifierToken('dashboard-token')
-        ;
-
-        $controller = new DashboardController(
-            $this->createStub(CacheInterface::class),
-            (new \ReflectionClass(DashboardMetricsProvider::class))->newInstanceWithoutConstructor(),
-        );
-
-        $this->expectException(AccessDeniedException::class);
-        $controller->get($user, new DashboardSettings(7));
-    }
-
     public function testGetReturnsCachedDashboardResponse(): void
     {
-        $user = new User();
-        $user
-            ->setEmail('dashboard-ok@example.com')
-            ->setName('Dashboard User')
-            ->setSharedPostboxIdentifierToken('dashboard-ok-token')
-        ;
-        $idProperty = new \ReflectionProperty($user, 'id');
-        $idProperty->setAccessible(true);
-        $idProperty->setValue($user, Uuid::v4());
-
         $settings = new DashboardSettings(7);
         $dashboard = new Dashboard(
             reportCount: 1,
@@ -104,6 +73,7 @@ final class DashboardControllerUnitTest extends TestCase
         $cache
             ->expects(self::once())
             ->method('get')
+            ->with('dashboard-7')
             ->willReturnCallback(static function (string $key, callable $callback): mixed {
                 $item = new class implements ItemInterface {
                     public function getKey(): string
@@ -155,7 +125,7 @@ final class DashboardControllerUnitTest extends TestCase
         ;
 
         $controller = new DashboardController($cache, $metrics);
-        $response = $controller->get($user, $settings);
+        $response = $controller->get($settings);
 
         self::assertSame(200, $response->getStatusCode());
     }

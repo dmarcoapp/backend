@@ -25,7 +25,6 @@ final class UserFactoryTest extends ApiIntegrationTestCase
         );
 
         self::assertNotNull($user->getId());
-        self::assertNotNull($user->getSharedPostboxIdentifierToken());
         self::assertSame(['ROLE_USER'], $user->getRoles());
         self::assertNull($user->getTwoFactorMethod());
 

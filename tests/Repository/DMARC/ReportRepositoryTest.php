@@ -9,7 +9,6 @@ use App\Entity\DMARC\IpInfo;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Enum\DMARC\DispositionType;
 use App\Enum\DMARC\DKIMAlign;
 use App\Enum\DMARC\SPFAlign;
@@ -24,13 +23,18 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(ReportRepository::class)]
 final class ReportRepositoryTest extends ApiIntegrationTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->removeReportData();
+    }
+
     public function testReportRepositoryAggregatesAndFiltersData(): void
     {
-        $user = $this->createAccount('report-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $repository = self::getContainer()->get(ReportRepository::class);
 
-        $report1 = $this->createReportForUser(
-            $user,
+        $report1 = $this->createReport(
             domain: 'example.com',
             begin: new \DateTimeImmutable('2024-01-01 00:00:00', new \DateTimeZone('UTC')),
             end: new \DateTimeImmutable('2024-01-02 00:00:00', new \DateTimeZone('UTC')),
@@ -41,8 +45,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         $this->addReportRecord($report1, DispositionType::NONE);
         $this->addReportRecord($report1, DispositionType::QUARANTINE);
 
-        $report2 = $this->createReportForUser(
-            $user,
+        $report2 = $this->createReport(
             domain: 'other.com',
             begin: new \DateTimeImmutable('2024-01-05 00:00:00', new \DateTimeZone('UTC')),
             end: new \DateTimeImmutable('2024-01-06 00:00:00', new \DateTimeZone('UTC')),
@@ -52,8 +55,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         );
         $this->addReportRecord($report2, DispositionType::NONE);
 
-        $unprocessed = $this->createReportForUser(
-            $user,
+        $unprocessed = $this->createReport(
             domain: 'pending.com',
             begin: null,
             end: null,
@@ -65,8 +67,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
 
         $this->entityManager->flush();
 
-        $paginated = $repository->getReportsForUserPaginated(
-            $user,
+        $paginated = $repository->getReportsPaginated(
             new Pagination(page: 1, pageSize: 10),
         );
         self::assertCount(2, $paginated);
@@ -77,10 +78,10 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
             new \DateTimeImmutable('2024-01-07 00:00:00', new \DateTimeZone('UTC')),
         );
 
-        self::assertSame(2, $repository->getReportCountInDatePeriod($period, $user));
-        self::assertSame(5, $repository->getSumCountInDatePeriod($period, $user));
-        self::assertEqualsWithDelta(2 / 3, $repository->getPassRate($period, $user), 0.0001);
-        self::assertSame(1, $repository->getThreatCount($period, $user));
+        self::assertSame(2, $repository->getReportCountInDatePeriod($period));
+        self::assertSame(5, $repository->getSumCountInDatePeriod($period));
+        self::assertEqualsWithDelta(2 / 3, $repository->getPassRate($period), 0.0001);
+        self::assertSame(1, $repository->getThreatCount($period));
         self::assertSame(
             [
                 [
@@ -94,7 +95,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
                     ],
                 ],
             ],
-            $repository->getOffendersInDatePeriod($period, $user),
+            $repository->getOffendersInDatePeriod($period),
         );
         self::assertSame(
             [
@@ -109,7 +110,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
                     ],
                 ],
             ],
-            $repository->getTopSendersInDatePeriod($period, $user),
+            $repository->getTopSendersInDatePeriod($period),
         );
         self::assertSame(
             [
@@ -118,7 +119,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
                     'country' => 'HU',
                 ],
             ],
-            $repository->getSourceCountryDistributionInDatePeriod($period, $user),
+            $repository->getSourceCountryDistributionInDatePeriod($period),
         );
         self::assertSame(
             [
@@ -127,14 +128,13 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
                     'reportingOrganization' => 'Example Reporter',
                 ],
             ],
-            $repository->getTopReportingOrganizationsInDatePeriod($period, $user),
+            $repository->getTopReportingOrganizationsInDatePeriod($period),
         );
 
         $unprocessedIds = $repository->getUnprocessedReportIds();
         self::assertNotEmpty($unprocessedIds);
 
-        $deleted = $repository->deleteReportsForUserOlderThan(
-            $user,
+        $deleted = $repository->deleteReportsOlderThan(
             new \DateTimeImmutable('2024-01-03 00:00:00', new \DateTimeZone('UTC')),
         );
         self::assertSame(1, $deleted);
@@ -142,13 +142,11 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
 
     public function testWeeklyQueriesCountMessagesByOutcome(): void
     {
-        $user = $this->createAccount('weekly-repo-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
         $repository = self::getContainer()->get(ReportRepository::class);
         $utc = new \DateTimeZone('UTC');
 
         // Reporters do not agree on how to spell a domain.
-        $older = $this->createReportForUser(
-            $user,
+        $older = $this->createReport(
             domain: 'Example.ORG',
             begin: new \DateTimeImmutable('2024-03-04 00:00:00', $utc),
             end: new \DateTimeImmutable('2024-03-04 23:59:59', $utc),
@@ -159,8 +157,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         $older->setPPolicy(DispositionType::NONE);
         $this->addRecordWithResults($older, '192.0.2.1', 10, DispositionType::NONE, DKIMAlign::PASS, SPFAlign::PASS, 'pass', 'example.org', SPFResult::PASS, 'example.org');
 
-        $latest = $this->createReportForUser(
-            $user,
+        $latest = $this->createReport(
             domain: 'example.org',
             begin: new \DateTimeImmutable('2024-03-05 00:00:00', $utc),
             end: new \DateTimeImmutable('2024-03-05 23:59:59', $utc),
@@ -173,8 +170,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         $this->addRecordWithResults($latest, '198.51.100.10', 40, DispositionType::NONE, DKIMAlign::FAIL, SPFAlign::FAIL, 'pass', 'mailer.example', SPFResult::PASS, 'mailer.example');
         $this->addRecordWithResults($latest, '203.0.113.5', 20, DispositionType::QUARANTINE, DKIMAlign::FAIL, SPFAlign::FAIL, '', '', SPFResult::FAIL, 'example.org');
 
-        $other = $this->createReportForUser(
-            $user,
+        $other = $this->createReport(
             domain: 'example.com',
             begin: new \DateTimeImmutable('2024-03-05 00:00:00', $utc),
             end: new \DateTimeImmutable('2024-03-05 23:59:59', $utc),
@@ -186,8 +182,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         $this->addRecordWithResults($other, '203.0.113.6', 5, DispositionType::REJECT, DKIMAlign::FAIL, SPFAlign::FAIL, 'fail', 'example.com', SPFResult::FAIL, 'example.com');
 
         // A later report whose policy could not be read leaves the known one.
-        $unreadable = $this->createReportForUser(
-            $user,
+        $unreadable = $this->createReport(
             domain: 'example.com',
             begin: new \DateTimeImmutable('2024-03-06 00:00:00', $utc),
             end: new \DateTimeImmutable('2024-03-06 23:59:59', $utc),
@@ -210,11 +205,11 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
                 ['domain' => 'example.org', 'messages' => 170, 'passed' => 110, 'failedDelivered' => 40, 'blocked' => 20],
                 ['domain' => 'example.com', 'messages' => 5, 'passed' => 0, 'failedDelivered' => 0, 'blocked' => 5],
             ],
-            $repository->getTrafficByDomain($period, $user),
+            $repository->getTrafficByDomain($period),
         );
-        self::assertEqualsWithDelta(110 / 175, $repository->getPassRate($period, $user), 0.0001);
+        self::assertEqualsWithDelta(110 / 175, $repository->getPassRate($period), 0.0001);
 
-        $policies = $repository->getLatestPolicyByDomain($period, $user);
+        $policies = $repository->getLatestPolicyByDomain($period);
         ksort($policies);
         self::assertSame(
             [
@@ -224,7 +219,7 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
             $policies,
         );
 
-        $failing = $repository->getFailingSources($period, $user);
+        $failing = $repository->getFailingSources($period);
         self::assertCount(3, $failing);
         self::assertSame(
             [
@@ -250,18 +245,17 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
         // The dashboard's gauges weigh messages the way its pass rate does.
         self::assertEqualsWithDelta(
             ['dmarc' => 110 / 175, 'dkim' => 110 / 175, 'spf' => 10 / 175],
-            $repository->getComplianceAverage($period, $user)[0],
+            $repository->getComplianceAverage($period)[0],
             0.0001,
         );
 
-        $firstReports = $repository->getFirstReportDateByDomain($user);
+        $firstReports = $repository->getFirstReportDateByDomain();
         ksort($firstReports);
         self::assertSame(['example.com', 'example.org'], array_keys($firstReports));
         self::assertSame('2024-03-04 00:00', $firstReports['example.org']->format('Y-m-d H:i'));
     }
 
-    private function createReportForUser(
-        User $user,
+    private function createReport(
         string $domain,
         ?\DateTimeImmutable $begin,
         ?\DateTimeImmutable $end,
@@ -278,7 +272,6 @@ final class ReportRepositoryTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();

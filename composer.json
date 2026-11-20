@@ -14,6 +14,7 @@
         "ext-zip": "*",
         "ext-zlib": "*",
         "bacon/bacon-qr-code": "^3.0",
+        "directorytree/imapengine": "^1.25",
         "doctrine/dbal": "^3.10.5",
         "doctrine/doctrine-bundle": "^2.18.1",
         "doctrine/doctrine-migrations-bundle": "^3.7",
@@ -116,6 +117,6 @@
         "symfony/maker-bundle": "^1.67.0",
         "symfony/stopwatch": "7.4.*",
         "symfony/web-profiler-bundle": "7.4.*",
-        "vimeo/psalm": "^6.13"
+        "vimeo/psalm": "^6.21"
     }
 }

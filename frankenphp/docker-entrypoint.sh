@@ -55,6 +55,10 @@ if [ "$1" = 'frankenphp' ] || [ "$1" = 'php' ] || [ "$1" = 'bin/console' ]; then
 		if [ "$(find ./migrations -iname '*.php' -print -quit)" ]; then
 			php bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing
 		fi
+
+		# The settings that used to be environment variables are taken over
+		# into the database, once there is a key to encrypt their secrets with.
+		php bin/console app:platform:import-env --no-interaction
 	fi
 
 	echo 'PHP app ready!'

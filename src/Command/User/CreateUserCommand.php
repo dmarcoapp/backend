@@ -56,6 +56,15 @@ final class CreateUserCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
+        if ($this->userRepository->hasAny()) {
+            $io->error([
+                'DMARCo has one account, and it already exists.',
+                'To get back into it, use app:user:reset-password or app:user:disable-two-factor.',
+            ]);
+
+            return Command::FAILURE;
+        }
+
         $email = $io->ask('Email', validator: static function (?string $value): string {
             $email = filter_var($value, FILTER_VALIDATE_EMAIL);
             if (false === $email) {
@@ -64,11 +73,6 @@ final class CreateUserCommand extends Command
 
             return $email;
         });
-        if ($this->userRepository->findOneBy(['email' => $email])) {
-            $io->error('User with email already exists!');
-
-            return Command::FAILURE;
-        }
         $name = $io->ask('Name', validator: static function (?string $value): string {
             if (null === $value || '' === trim($value)) {
                 throw new \RuntimeException('Enter a name.');

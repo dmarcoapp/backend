@@ -7,7 +7,7 @@ namespace App\Tests\Mapper\User;
 use App\DTO\Output\User\UserApi;
 use App\Entity\User\User;
 use App\Mapper\User\UserEntityToApiMapper;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
+use App\Tests\Support\PlatformSettingsTestFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
@@ -27,10 +27,9 @@ final class UserEntityToApiMapperTest extends TestCase
         $user
             ->setEmail('user@example.com')
             ->setName('Example User')
-            ->setSharedPostboxIdentifierToken('shared-token')
         ;
 
-        $provider = new AggregateReportPostboxAddressProvider('reports.example.com');
+        $provider = PlatformSettingsTestFactory::intakeAddresses(PlatformSettingsTestFactory::gatewaySettings('shared-token', 'reports.example.com'));
         $mapper = new UserEntityToApiMapper($provider);
 
         $dto = $mapper->load($user, UserApi::class, []);
@@ -48,10 +47,9 @@ final class UserEntityToApiMapperTest extends TestCase
         $user
             ->setEmail('user@example.com')
             ->setName('Example User')
-            ->setSharedPostboxIdentifierToken('shared-token')
         ;
 
-        $provider = new AggregateReportPostboxAddressProvider('reports.example.com');
+        $provider = PlatformSettingsTestFactory::intakeAddresses(PlatformSettingsTestFactory::gatewaySettings('shared-token', 'reports.example.com'));
         $mapper = new UserEntityToApiMapper($provider);
 
         $this->expectException(\LogicException::class);

@@ -28,10 +28,15 @@ use Symfony\Component\Uid\Uuid;
 #[CoversClass(ProcessReportHandler::class)]
 final class ProcessReportHandlerTest extends ApiIntegrationTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->removeReportData();
+    }
+
     public function testInvokePopulatesReportAndRecords(): void
     {
-        $user = $this->createAccount('report-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable())
@@ -40,7 +45,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -100,6 +104,32 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
         self::assertSame('example.com', $record->getSpfDomain());
         self::assertSame('Example Org', $record->getSourceIpInfo()?->getOrgName());
         self::assertSame('HU', $record->getSourceIpInfo()?->getOrgCountry());
+    }
+
+    public function testInvokeDropsACopyStoredBeforeCopiesWereRecognized(): void
+    {
+        // Two copies an earlier version stored, neither of them processed yet.
+        $first = $this->createReportWithXml($this->validXml());
+        $copy = $this->createReportWithXml($this->validXml());
+        $copyId = $copy->getId();
+        self::assertNotNull($copyId);
+
+        $handler = new ProcessReportHandler(
+            self::getContainer()->get(ReportRepository::class),
+            $this->entityManager,
+            new ReportXMLProcessor(new NullLogger(), $this->schemaSource(), $this->rfc9990SchemaSource()),
+            $this->createStub(IpLookupInterface::class),
+            $this->createStub(LoggerInterface::class),
+        );
+
+        $handler(new ProcessReport($first->getId()->toRfc4122()));
+        $handler(new ProcessReport($copyId->toRfc4122()));
+
+        $this->entityManager->clear();
+        $reports = self::getContainer()->get(ReportRepository::class)->findAll();
+        self::assertCount(1, $reports);
+        self::assertTrue($reports[0]->isProcessed());
+        self::assertNull(self::getContainer()->get(ReportRepository::class)->find($copyId));
     }
 
     public function testInvokeReturnsWhenReportMissing(): void
@@ -202,8 +232,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
 
     public function testInvokeMarksReportAsNotVerifiedWhenSenderDoesNotMatch(): void
     {
-        $user = $this->createAccount('report-fail-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable())
@@ -212,7 +240,6 @@ final class ProcessReportHandlerTest extends ApiIntegrationTestCase
             ->setMessageId('<message-mismatch@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -413,8 +440,6 @@ XML;
 
     private function createReportWithXml(string $xml): Report
     {
-        $user = $this->createAccount('report-xml-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable())
@@ -423,7 +448,6 @@ XML;
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();

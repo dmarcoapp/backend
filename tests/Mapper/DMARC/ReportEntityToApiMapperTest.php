@@ -27,7 +27,6 @@ final class ReportEntityToApiMapperTest extends TestCase
         $user
             ->setEmail('mapper-user@example.com')
             ->setName('Mapper User')
-            ->setSharedPostboxIdentifierToken('mapper-token')
         ;
         $this->setEntityId($user, Uuid::v4());
 
@@ -39,7 +38,6 @@ final class ReportEntityToApiMapperTest extends TestCase
             ->setMessageId('<msg@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -58,7 +56,7 @@ final class ReportEntityToApiMapperTest extends TestCase
             ->setSumCount(10)
         ;
 
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domainId = Uuid::v4();
         $this->setEntityId($domain, $domainId);
 

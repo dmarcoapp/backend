@@ -43,15 +43,25 @@ final class UserRepositoryTest extends ApiIntegrationTestCase
         self::assertTrue(self::getContainer()->get(UserRepository::class)->hasAny());
     }
 
-    public function testGetAllUserIdsHonorsLimit(): void
+    public function testFindAccountIsTheOldestAccount(): void
     {
-        $this->createAccount('limit-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $this->createAccount('limit2-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $this->removeAccounts();
+        $account = $this->createAccount('account-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
+        $account->setCreatedAt(new \DateTimeImmutable('-1 year', new \DateTimeZone('UTC')));
+        $this->entityManager->flush();
+        $this->createAccount('later-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
 
-        $repository = self::getContainer()->get(UserRepository::class);
-        $ids = $repository->getAllUserIds(1);
+        $found = self::getContainer()->get(UserRepository::class)->findAccount();
 
-        self::assertCount(1, $ids);
+        self::assertNotNull($found);
+        self::assertSame($account->getEmail(), $found->getEmail());
+    }
+
+    public function testFindAccountIsNullWithoutAnAccount(): void
+    {
+        $this->removeAccounts();
+
+        self::assertNull(self::getContainer()->get(UserRepository::class)->findAccount());
     }
 
     public function testSaveAndDelete(): void

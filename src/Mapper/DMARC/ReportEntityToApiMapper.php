@@ -41,14 +41,8 @@ final readonly class ReportEntityToApiMapper implements MapperInterface
         assert($dto instanceof ReportApi);
 
         $email = $entity->getEmail();
-        $owner = $email?->getOwner();
-        $domainEntity = null;
-        if (null !== $owner) {
-            $domainEntity = $this->domainRepository->findOneBy([
-                'domain' => $entity->getDomain(),
-                'user' => $owner,
-            ]);
-        }
+        $domainName = $entity->getDomain();
+        $domainEntity = null === $domainName ? null : $this->domainRepository->findOneBy(['domain' => $domainName]);
 
         $dto->receivedAt = $email?->getCreatedAt();
         $dto->fromAddress = $email?->getFromAddress();

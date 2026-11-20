@@ -47,7 +47,6 @@ final class WeeklyOverviewMailerTest extends TestCase
         $user = new User();
         $user
             ->setName('Weekly User')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         $mailer = $this->createMock(MailerInterface::class);
@@ -106,7 +105,6 @@ final class WeeklyOverviewMailerTest extends TestCase
         $user
             ->setName('Weekly User')
             ->setEmail('weekly@example.com')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         return $user;

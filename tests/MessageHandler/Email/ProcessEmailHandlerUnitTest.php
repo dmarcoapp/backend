@@ -7,7 +7,6 @@ namespace App\Tests\MessageHandler\Email;
 use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Message\Email\ProcessEmail;
 use App\MessageHandler\Email\ProcessEmailHandler;
 use App\Repository\DMARC\DomainRepository;
@@ -32,7 +31,7 @@ final class ProcessEmailHandlerUnitTest extends TestCase
 {
     public function testInvokeThrowsWhenEmailIdMissing(): void
     {
-        $email = $this->createEmailEntityWithOwner();
+        $email = new Email();
 
         $emailRepository = $this->createStub(EmailRepository::class);
         $emailRepository->method('find')->willReturn($email);
@@ -46,7 +45,7 @@ final class ProcessEmailHandlerUnitTest extends TestCase
 
     public function testInvokeThrowsWhenAttachmentFilenameMissing(): void
     {
-        $email = $this->createEmailEntityWithOwner();
+        $email = new Email();
         $this->setEntityId($email, Uuid::v4());
 
         $emailRepository = $this->createStub(EmailRepository::class);
@@ -63,7 +62,7 @@ final class ProcessEmailHandlerUnitTest extends TestCase
     {
         // What an email that arrived before the upgrade, and still pointed at
         // object storage, looks like to the handler.
-        $email = $this->createEmailEntityWithOwner();
+        $email = new Email();
         $this->setEntityId($email, Uuid::v4());
         $email->setAttachmentFilename('report.xml');
 
@@ -77,27 +76,9 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
     }
 
-    public function testInvokeThrowsWhenEmailOwnerMissing(): void
-    {
-        $email = new Email();
-        $this->setEntityId($email, Uuid::v4());
-        $email
-            ->setAttachmentFilename('report.xml')
-        ;
-
-        $emailRepository = $this->createStub(EmailRepository::class);
-        $emailRepository->method('find')->willReturn($email);
-
-        $handler = $this->createHandler($emailRepository, $this->createStub(ReportRepository::class));
-
-        $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('Email owner is missing.');
-        $handler(new ProcessEmail(Uuid::v4()->toRfc4122()));
-    }
-
     public function testInvokeThrowsWhenReportIdMissing(): void
     {
-        $email = $this->createEmailEntityWithOwner();
+        $email = new Email();
         $this->setEntityId($email, Uuid::v4());
         $email->setAttachmentFilename('report.xml');
         $email->setAttachmentContent($this->validXml());
@@ -105,14 +86,15 @@ final class ProcessEmailHandlerUnitTest extends TestCase
         $emailRepository = $this->createStub(EmailRepository::class);
         $emailRepository->method('find')->willReturn($email);
 
+        // No copy of the report has arrived, and the email's own report is
+        // there already.
         $reportRepository = $this->createStub(ReportRepository::class);
-        $reportRepository->method('findOneBy')->with(['email' => $email])->willReturn(new Report());
+        $reportRepository->method('findOneBy')->willReturnCallback(
+            static fn (array $criteria): ?Report => ['email' => $email] === $criteria ? new Report() : null,
+        );
 
         $domainRepository = $this->createStub(DomainRepository::class);
-        $domainRepository
-            ->method('findOneBy')
-            ->willReturn(new Domain($email->getOwner() ?? new User(), 'example.com'))
-        ;
+        $domainRepository->method('findOneBy')->willReturn(new Domain('example.com'));
 
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->expects(self::once())->method('flush');
@@ -157,20 +139,6 @@ final class ProcessEmailHandlerUnitTest extends TestCase
             $this->createStub(MessageBusInterface::class),
             $this->createStub(LoggerInterface::class),
         );
-    }
-
-    private function createEmailEntityWithOwner(): Email
-    {
-        $owner = new User();
-        $owner->setEmail('owner@example.com');
-        $owner->setName('Owner');
-        $owner->setSharedPostboxIdentifierToken('owner-token');
-        $this->setEntityId($owner, Uuid::v4());
-
-        $email = new Email();
-        $email->setOwner($owner);
-
-        return $email;
     }
 
     private function createConnectionStub(): Connection

@@ -23,7 +23,6 @@ final class LoginNotificationMailerTest extends TestCase
         $user
             ->setName('Login User')
             ->setEmail('login@example.com')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         $mailer = $this->createMock(MailerInterface::class);
@@ -48,7 +47,6 @@ final class LoginNotificationMailerTest extends TestCase
         $user
             ->setName('Login User')
             ->setEmail('login@example.com')
-            ->setSharedPostboxIdentifierToken('token')
             ->setUnusualNewLoginNotificationEnabled(false)
         ;
 
@@ -69,7 +67,6 @@ final class LoginNotificationMailerTest extends TestCase
         $user = new User();
         $user
             ->setName('Login User')
-            ->setSharedPostboxIdentifierToken('token')
         ;
 
         $mailer = $this->createMock(MailerInterface::class);

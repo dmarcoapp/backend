@@ -4,34 +4,33 @@ declare(strict_types=1);
 
 namespace App\Service\Email;
 
-use App\Entity\User\User;
-use App\Repository\User\UserRepository;
+use App\Service\Platform\PlatformSettingsProvider;
 use Symfony\Component\String\ByteString;
 
 final readonly class AggregateReportPostboxResolver
 {
     public function __construct(
-        private UserRepository $userRepository,
+        private PlatformSettingsProvider $settings,
     ) {}
 
     /**
-     * The inverse of AggregateReportPostboxAddressProvider: the local part of a
-     * postbox address is the owner's shared postbox identifier token.
+     * The inverse of AggregateReportPostboxAddressProvider: the local part of
+     * the report address is the installation's report address token.
      */
-    public function resolveUser(string $postboxAddress): ?User
+    public function isReportAddress(string $postboxAddress): bool
     {
         $address = trim($postboxAddress);
 
         if (!str_contains($address, '@')) {
-            return null;
+            return false;
         }
 
         $identifier = new ByteString($address)->before('@')->toString();
 
         if ('' === $identifier) {
-            return null;
+            return false;
         }
 
-        return $this->userRepository->findOneBy(['sharedPostboxIdentifierToken' => $identifier]);
+        return $identifier === $this->settings->reportAddressToken();
     }
 }

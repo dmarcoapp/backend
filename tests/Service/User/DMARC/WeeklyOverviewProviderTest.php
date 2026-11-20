@@ -11,8 +11,8 @@ use App\Entity\DMARC\Domain;
 use App\Entity\User\User;
 use App\Repository\DMARC\DomainRepository;
 use App\Repository\DMARC\ReportRepository;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
 use App\Service\User\DMARC\WeeklyOverviewProvider;
+use App\Tests\Support\PlatformSettingsTestFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -103,9 +103,9 @@ final class WeeklyOverviewProviderTest extends TestCase
                 self::source('your bank, act now', '203.0.113.90', 'pass', 'evil.example', 1000, delivered: 1000),
             ],
             knownDomains: [
-                self::domain($user, 'Example.org', '0192e0c4-0000-7000-8000-000000000009', '2026-08-01'),
-                self::domain($user, 'example.org', self::MONITORED_ID, '2026-08-02'),
-                self::domain($user, 'quiet.example', '0192e0c4-0000-7000-8000-000000000004', '2026-08-01'),
+                self::domain('Example.org', '0192e0c4-0000-7000-8000-000000000009', '2026-08-01'),
+                self::domain('example.org', self::MONITORED_ID, '2026-08-02'),
+                self::domain('quiet.example', '0192e0c4-0000-7000-8000-000000000004', '2026-08-01'),
             ],
             firstReports: [
                 'example.net' => '2026-10-14',
@@ -221,9 +221,9 @@ final class WeeklyOverviewProviderTest extends TestCase
         return new WeeklyOverviewProvider(
             $reportRepository,
             $domainRepository,
-            new AggregateReportPostboxAddressProvider('aggregate-reports.example.test'),
+            PlatformSettingsTestFactory::intakeAddresses(PlatformSettingsTestFactory::gatewaySettings('postbox-token', 'aggregate-reports.example.test')),
             new MockClock($now.' UTC'),
-        )->provide($user);
+        )->provide();
     }
 
     private static function user(): User
@@ -232,7 +232,6 @@ final class WeeklyOverviewProviderTest extends TestCase
         $user
             ->setEmail('weekly@example.com')
             ->setName('Weekly User')
-            ->setSharedPostboxIdentifierToken('postbox-token')
         ;
 
         return $user;
@@ -287,9 +286,9 @@ final class WeeklyOverviewProviderTest extends TestCase
         ];
     }
 
-    private static function domain(User $user, string $name, string $id, string $createdAt): Domain
+    private static function domain(string $name, string $id, string $createdAt): Domain
     {
-        $domain = new Domain($user, $name);
+        $domain = new Domain($name);
         $domain->setCreatedAt(new \DateTimeImmutable($createdAt.' UTC'));
         new \ReflectionProperty(Domain::class, 'id')->setValue($domain, Uuid::fromString($id));
 

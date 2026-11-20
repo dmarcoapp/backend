@@ -19,6 +19,10 @@ use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ReportRepository::class)]
+// A reporter names each report, so the same name for the same domain and day
+// is the same report delivered twice, which happens when a domain lists two
+// report addresses that both lead here.
+#[ORM\UniqueConstraint(name: 'uniq_report_origin', fields: ['reportingOrganization', 'reportId', 'domain', 'beginDate'])]
 class Report implements EntityInterface, FilterableInterface, SortableInterface
 {
     #[ORM\Id]

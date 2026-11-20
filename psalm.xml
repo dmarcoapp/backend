@@ -72,6 +72,8 @@
         </PossiblyUnusedProperty>
         <PossiblyUnusedReturnValue errorLevel="error">
             <errorLevel type="suppress">
+                <!-- Setters return the entity, so that they can be chained. -->
+                <directory name="src/Entity" />
                 <directory name="src/Repository" />
                 <file name="src/Service/User/UserFactory.php" />
             </errorLevel>

@@ -6,7 +6,7 @@ namespace App\Mapper\User;
 
 use App\DTO\Output\User\UserApi;
 use App\Entity\User\User;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
+use App\Service\Intake\IntakeAddresses;
 use Symfonycasts\MicroMapper\AsMapper;
 use Symfonycasts\MicroMapper\MapperInterface;
 
@@ -14,7 +14,7 @@ use Symfonycasts\MicroMapper\MapperInterface;
 final readonly class UserEntityToApiMapper implements MapperInterface
 {
     public function __construct(
-        private AggregateReportPostboxAddressProvider $aggregateReportPostboxAddressProvider,
+        private IntakeAddresses $intakeAddresses,
     ) {}
 
     #[\Override]
@@ -42,7 +42,7 @@ final readonly class UserEntityToApiMapper implements MapperInterface
 
         $dto->email = $entity->getEmail();
         $dto->name = $entity->getName();
-        $dto->sharedAggregatePostboxAddress = $this->aggregateReportPostboxAddressProvider->getAddressForUser($entity);
+        $dto->sharedAggregatePostboxAddress = $this->intakeAddresses->primary();
 
         return $dto;
     }

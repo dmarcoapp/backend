@@ -6,7 +6,6 @@ namespace App\Tests\Mapper\DMARC;
 
 use App\DTO\Output\DMARC\DomainApi;
 use App\Entity\DMARC\Domain;
-use App\Entity\User\User;
 use App\Enum\DMARC\Domain\ProtectionLevel;
 use App\Mapper\DMARC\DomainEntityToApiMapper;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -21,12 +20,7 @@ final class DomainEntityToApiMapperTest extends TestCase
 {
     public function testLoadAndPopulateMapsDomainFields(): void
     {
-        $user = new User();
-        $user->setEmail('user@example.com');
-        $user->setName('Example User');
-        $user->setSharedPostboxIdentifierToken('shared-token');
-
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $domainId = Uuid::v4();
         $this->setEntityId($domain, $domainId);
 
@@ -56,15 +50,10 @@ final class DomainEntityToApiMapperTest extends TestCase
 
     public function testLoadThrowsWhenDomainIdIsMissing(): void
     {
-        $user = new User();
-        $user->setEmail('user@example.com');
-        $user->setName('Example User');
-        $user->setSharedPostboxIdentifierToken('shared-token');
-
         $mapper = new DomainEntityToApiMapper();
 
         $this->expectException(\LogicException::class);
-        $mapper->load(new Domain($user, 'example.com'), DomainApi::class, []);
+        $mapper->load(new Domain('example.com'), DomainApi::class, []);
     }
 
     private function setEntityId(object $entity, Uuid $id): void

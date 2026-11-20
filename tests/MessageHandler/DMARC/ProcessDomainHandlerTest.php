@@ -33,7 +33,8 @@ use App\Message\DMARC\ProcessDomain;
 use App\MessageHandler\DMARC\ProcessDomainHandler;
 use App\MessageHandler\DMARC\TestDnsRecordStore;
 use App\Repository\DMARC\DomainRepository;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
+use App\Repository\Platform\PlatformSettingsRepository;
+use App\Service\Intake\IntakeAddresses;
 use App\Tests\Api\ApiIntegrationTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -45,12 +46,13 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
 {
     public function testInvokeUpdatesDomainWhenDmarcRecordFound(): void
     {
-        $token = 'shared-token-'.uniqid('', true);
-        $user = $this->createAccount('domain-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $user->setSharedPostboxIdentifierToken($token);
+        // The record names the report address of the settings.
+        $settings = self::getContainer()->get(PlatformSettingsRepository::class)->get();
+        $settings->setReportAddressDomain('reports.example.test')->setApiIntakeEnabled(true);
         $this->entityManager->flush();
+        $token = $settings->getReportAddressToken();
 
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $this->entityManager->persist($domain);
         $this->entityManager->flush();
 
@@ -63,7 +65,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessDomainHandler(
             self::getContainer()->get(DomainRepository::class),
             $this->entityManager,
-            new AggregateReportPostboxAddressProvider('reports.example.test')
+            self::getContainer()->get(IntakeAddresses::class)
         );
 
         $handler(new ProcessDomain($domain->getId()->toRfc4122()));
@@ -78,11 +80,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
 
     public function testInvokeKeepsDmarcFieldsWhenNoRecordFound(): void
     {
-        $user = $this->createAccount('domain-empty-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-        $user->setSharedPostboxIdentifierToken('shared-token-'.uniqid('', true));
-        $this->entityManager->flush();
-
-        $domain = new Domain($user, 'example.net');
+        $domain = new Domain('example.net');
         $this->entityManager->persist($domain);
         $this->entityManager->flush();
 
@@ -91,7 +89,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessDomainHandler(
             self::getContainer()->get(DomainRepository::class),
             $this->entityManager,
-            new AggregateReportPostboxAddressProvider('reports.example.test')
+            self::getContainer()->get(IntakeAddresses::class)
         );
 
         $handler(new ProcessDomain($domain->getId()->toRfc4122()));
@@ -111,7 +109,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
         $handler = new ProcessDomainHandler(
             self::getContainer()->get(DomainRepository::class),
             $this->entityManager,
-            new AggregateReportPostboxAddressProvider('reports.example.test')
+            self::getContainer()->get(IntakeAddresses::class)
         );
 
         $handler(new ProcessDomain('00000000-0000-0000-0000-000000000000'));

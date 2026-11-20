@@ -7,7 +7,6 @@ namespace App\Repository\DMARC;
 use App\DTO\Input\Common\Pagination;
 use App\Entity\DMARC\Report;
 use App\Entity\DMARC\ReportRecord;
-use App\Entity\User\User;
 use App\Enum\DMARC\DispositionType;
 use App\Enum\DMARC\DKIMAlign;
 use App\Enum\DMARC\SPFAlign;
@@ -37,25 +36,21 @@ class ReportRepository extends ServiceEntityRepository
         parent::__construct($registry, Report::class);
     }
 
-    public function getReportsForUserPaginated(User $user, Pagination $pagination): Paginator
+    public function getReportsPaginated(Pagination $pagination): Paginator
     {
         $queryBuilder = $this->createQueryBuilder('r')
-            ->join('r.email', 'em')
-            ->where('IDENTITY(em.owner) = :userId')
-            ->andWhere('r.isProcessed = true')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
+            ->where('r.isProcessed = true')
         ;
 
         return $this->paginate($pagination, $queryBuilder);
     }
 
-    public function deleteReportsForUserOlderThan(User $user, \DateTimeImmutable $threshold): int
+    public function deleteReportsOlderThan(\DateTimeImmutable $threshold): int
     {
         $subQueryBuilder = $this->createQueryBuilder('r_sub');
         $subQueryBuilder
             ->select('r_sub.id')
             ->join('r_sub.email', 'em_sub')
-            ->andWhere('IDENTITY(em_sub.owner) = :userId')
             ->andWhere('em_sub.createdAt < :threshold')
         ;
 
@@ -63,7 +58,6 @@ class ReportRepository extends ServiceEntityRepository
         $queryBuilder
             ->delete()
             ->andWhere($queryBuilder->expr()->in('r.id', $subQueryBuilder->getDQL()))
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
             ->setParameter('threshold', $threshold)
         ;
 
@@ -75,7 +69,7 @@ class ReportRepository extends ServiceEntityRepository
      *
      * @return list<Report>
      */
-    public function getReportsByIdsForUser(User $user, array $reportIds): array
+    public function getReportsByIds(array $reportIds): array
     {
         if ([] === $reportIds) {
             return [];
@@ -84,10 +78,7 @@ class ReportRepository extends ServiceEntityRepository
         $reports = [];
         foreach ($reportIds as $reportId) {
             $report = $this->createQueryBuilder('r')
-                ->join('r.email', 'em')
-                ->andWhere('IDENTITY(em.owner) = :userId')
                 ->andWhere('r.id = :reportId')
-                ->setParameter('userId', $user->getId(), UuidType::NAME)
                 ->setParameter('reportId', Uuid::fromString($reportId), UuidType::NAME)
                 ->getQuery()
                 ->getOneOrNullResult()
@@ -115,19 +106,16 @@ class ReportRepository extends ServiceEntityRepository
         return $queryBuilder->getQuery()->getSingleColumnResult();
     }
 
-    public function getReportCountInDatePeriod(\DatePeriod $period, User $user): int
+    public function getReportCountInDatePeriod(\DatePeriod $period): int
     {
         $queryBuilder = $this->createQueryBuilder('r');
         $queryBuilder
             ->select('COUNT(r)')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         try {
@@ -137,19 +125,16 @@ class ReportRepository extends ServiceEntityRepository
         }
     }
 
-    public function getSumCountInDatePeriod(\DatePeriod $period, User $user): int
+    public function getSumCountInDatePeriod(\DatePeriod $period): int
     {
         $queryBuilder = $this->createQueryBuilder('r');
         $queryBuilder
             ->select('SUM(r.sumCount)')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         try {
@@ -164,9 +149,9 @@ class ReportRepository extends ServiceEntityRepository
      * was aligned with the domain. Weighted by message count, so a row that
      * stands for a thousand messages counts a thousand times.
      */
-    public function getPassRate(\DatePeriod $period, User $user): float
+    public function getPassRate(\DatePeriod $period): float
     {
-        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period, $user)
+        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period)
             ->select(
                 'SUM(rr.count) AS messages',
                 'SUM(CASE WHEN '.self::ALIGNED.' THEN rr.count ELSE 0 END) AS passed',
@@ -190,9 +175,9 @@ class ReportRepository extends ServiceEntityRepository
      *
      * @return list<array{domain: string, messages: int, passed: int, failedDelivered: int, blocked: int}>
      */
-    public function getTrafficByDomain(\DatePeriod $period, User $user): array
+    public function getTrafficByDomain(\DatePeriod $period): array
     {
-        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period, $user)
+        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period)
             ->select(
                 'LOWER(r.domain) AS domain',
                 'SUM(rr.count) AS messages',
@@ -227,14 +212,13 @@ class ReportRepository extends ServiceEntityRepository
      *
      * @return array<string, array{policy: string, percent: ?int, subdomainPolicy: ?string}>
      */
-    public function getLatestPolicyByDomain(\DatePeriod $period, User $user): array
+    public function getLatestPolicyByDomain(\DatePeriod $period): array
     {
         $queryBuilder = $this->createQueryBuilder('r')
             ->select('LOWER(r.domain) AS domain', 'r.pPolicy AS policy', 'r.pctPolicy AS percent', 'r.spPolicy AS subdomainPolicy')
             ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
             ->andWhere('r.domain IS NOT NULL')
             ->andWhere('r.pPolicy IS NOT NULL')
@@ -243,7 +227,6 @@ class ReportRepository extends ServiceEntityRepository
             ->addOrderBy('em.createdAt', 'DESC')
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         $policies = [];
@@ -274,9 +257,9 @@ class ReportRepository extends ServiceEntityRepository
      *
      * @return list<array{domain: string, sourceIp: string, orgName: ?string, orgCountry: ?string, dkimAuth: string, dkimDomain: string, spfAuth: string, spfDomain: string, messages: int, delivered: int, quarantined: int, rejected: int}>
      */
-    public function getFailingSources(\DatePeriod $period, User $user): array
+    public function getFailingSources(\DatePeriod $period): array
     {
-        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period, $user)
+        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period)
             ->select(
                 'LOWER(r.domain) AS domain',
                 'rr.sourceIp AS sourceIp',
@@ -324,21 +307,18 @@ class ReportRepository extends ServiceEntityRepository
     }
 
     /**
-     * When each of the user's domains was first reported on, by the start of
+     * When each domain was first reported on, by the start of
      * its earliest report still kept, keyed by the lower-cased domain.
      *
      * @return array<string, \DateTimeImmutable>
      */
-    public function getFirstReportDateByDomain(User $user): array
+    public function getFirstReportDateByDomain(): array
     {
         $queryBuilder = $this->createQueryBuilder('r')
             ->select('LOWER(r.domain) AS domain', 'MIN(r.beginDate) AS firstReport')
-            ->join('r.email', 'em')
-            ->where('IDENTITY(em.owner) = :userId')
-            ->andWhere('r.isProcessed = true')
+            ->where('r.isProcessed = true')
             ->andWhere('r.domain IS NOT NULL')
             ->groupBy('domain')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         $dates = [];
@@ -351,15 +331,13 @@ class ReportRepository extends ServiceEntityRepository
         return $dates;
     }
 
-    public function getThreatCount(\DatePeriod $period, User $user): int
+    public function getThreatCount(\DatePeriod $period): int
     {
         $subQueryBuilder = $this->createQueryBuilder('r');
         $subQueryBuilder
             ->select('r.id')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
         ;
 
@@ -372,7 +350,6 @@ class ReportRepository extends ServiceEntityRepository
             ->setParameter('disposition', DispositionType::NONE->value)
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         try {
@@ -382,7 +359,7 @@ class ReportRepository extends ServiceEntityRepository
         }
     }
 
-    public function getMessageCountByDate(\DatePeriod $period, User $user): array
+    public function getMessageCountByDate(\DatePeriod $period): array
     {
         $results = [];
         foreach ($period as $date) {
@@ -393,11 +370,8 @@ class ReportRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('r');
 
         $qb->select('r.beginDate AS date', 'r.sumCount AS cnt')
-            ->join('r.email', 'em')
-            ->where('IDENTITY(em.owner) = :userId')
-            ->andWhere('r.beginDate >= :start')
+            ->where('r.beginDate >= :start')
             ->andWhere('r.endDate <= :end')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
             ->setParameter('start', $period->getStartDate()->format('Y-m-d 00:00:00'))
             ->setParameter('end', $period->getEndDate()->format('Y-m-d 23:59:59'))
         ;
@@ -414,7 +388,7 @@ class ReportRepository extends ServiceEntityRepository
         return $results;
     }
 
-    public function getThreatCountByDate(\DatePeriod $period, User $user): array
+    public function getThreatCountByDate(\DatePeriod $period): array
     {
         $results = [];
         foreach ($period as $date) {
@@ -426,12 +400,9 @@ class ReportRepository extends ServiceEntityRepository
         $qb->select('r.beginDate AS date', 'rr.count AS cnt')
             ->from(ReportRecord::class, 'rr')
             ->join('rr.report', 'r')
-            ->join('r.email', 'em')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.beginDate >= :start')
             ->andWhere('r.endDate <= :end')
             ->andWhere('rr.disposition != :dispositions')
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
             ->setParameter('start', $period->getStartDate()->format('Y-m-d 00:00:00'))
             ->setParameter('end', $period->getEndDate()->format('Y-m-d 23:59:59'))
             ->setParameter('dispositions', DispositionType::NONE->value)
@@ -456,9 +427,9 @@ class ReportRepository extends ServiceEntityRepository
      *
      * @return list<array{dmarc: float, dkim: float, spf: float}>
      */
-    public function getComplianceAverage(\DatePeriod $period, User $user): array
+    public function getComplianceAverage(\DatePeriod $period): array
     {
-        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period, $user)
+        $queryBuilder = $this->createRecordsInPeriodQueryBuilder($period)
             ->select(
                 'SUM(rr.count) AS messages',
                 'SUM(CASE WHEN '.self::ALIGNED.' THEN rr.count ELSE 0 END) AS dmarc',
@@ -479,15 +450,13 @@ class ReportRepository extends ServiceEntityRepository
         ]];
     }
 
-    public function getOffendersInDatePeriod(\DatePeriod $period, User $user, int $limit = 5): array
+    public function getOffendersInDatePeriod(\DatePeriod $period, int $limit = 5): array
     {
         $affectedReportsQueryBuilder = $this->createQueryBuilder('r');
         $affectedReportsQueryBuilder
             ->select('r.id')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
         ;
 
@@ -510,7 +479,6 @@ class ReportRepository extends ServiceEntityRepository
             ->setParameter('disposition', DispositionType::NONE->value)
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         return array_map(
@@ -528,15 +496,13 @@ class ReportRepository extends ServiceEntityRepository
         );
     }
 
-    public function getTopSendersInDatePeriod(\DatePeriod $period, User $user, int $limit = 5): array
+    public function getTopSendersInDatePeriod(\DatePeriod $period, int $limit = 5): array
     {
         $affectedReportsQueryBuilder = $this->createQueryBuilder('r');
         $affectedReportsQueryBuilder
             ->select('r.id')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
         ;
 
@@ -557,7 +523,6 @@ class ReportRepository extends ServiceEntityRepository
             ->setMaxResults($limit)
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         return array_map(
@@ -575,15 +540,13 @@ class ReportRepository extends ServiceEntityRepository
         );
     }
 
-    public function getSourceCountryDistributionInDatePeriod(\DatePeriod $period, User $user, int $limit = 10): array
+    public function getSourceCountryDistributionInDatePeriod(\DatePeriod $period, int $limit = 10): array
     {
         $affectedReportsQueryBuilder = $this->createQueryBuilder('r');
         $affectedReportsQueryBuilder
             ->select('r.id')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
         ;
 
@@ -604,7 +567,6 @@ class ReportRepository extends ServiceEntityRepository
             ->setParameter('emptyCountry', '')
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         return array_map(
@@ -616,7 +578,7 @@ class ReportRepository extends ServiceEntityRepository
         );
     }
 
-    public function getTopReportingOrganizationsInDatePeriod(\DatePeriod $period, User $user, int $limit = 5): array
+    public function getTopReportingOrganizationsInDatePeriod(\DatePeriod $period, int $limit = 5): array
     {
         $queryBuilder = $this->createQueryBuilder('r');
         $queryBuilder
@@ -624,10 +586,8 @@ class ReportRepository extends ServiceEntityRepository
                 'r.reportingOrganization AS reportingOrganization',
                 'COUNT(r.id) AS count',
             )
-            ->join('r.email', 'em')
             ->andWhere('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
             ->andWhere('r.reportingOrganization IS NOT NULL')
             ->groupBy('r.reportingOrganization')
@@ -636,7 +596,6 @@ class ReportRepository extends ServiceEntityRepository
             ->setMaxResults($limit)
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
 
         return array_map(
@@ -674,24 +633,21 @@ class ReportRepository extends ServiceEntityRepository
     }
 
     /**
-     * Report records of the user's processed reports in the period, aliased
+     * Report records of the processed reports in the period, aliased
      * rr, with r for the report. Sets the parameters ALIGNED needs.
      */
-    private function createRecordsInPeriodQueryBuilder(\DatePeriod $period, User $user): QueryBuilder
+    private function createRecordsInPeriodQueryBuilder(\DatePeriod $period): QueryBuilder
     {
         return $this->getEntityManager()->createQueryBuilder()
             ->from(ReportRecord::class, 'rr')
             ->join('rr.report', 'r')
-            ->join('r.email', 'em')
             ->where('r.beginDate >= :startDate')
             ->andWhere('r.endDate <= :endDate')
-            ->andWhere('IDENTITY(em.owner) = :userId')
             ->andWhere('r.isProcessed = true')
             ->setParameter('dkimPass', DKIMAlign::PASS->value)
             ->setParameter('spfPass', SPFAlign::PASS->value)
             ->setParameter('startDate', $period->getStartDate())
             ->setParameter('endDate', $period->getEndDate())
-            ->setParameter('userId', $user->getId(), UuidType::NAME)
         ;
     }
 }

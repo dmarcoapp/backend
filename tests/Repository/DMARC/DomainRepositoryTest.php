@@ -16,15 +16,13 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(DomainRepository::class)]
 final class DomainRepositoryTest extends ApiIntegrationTestCase
 {
-    public function testGetDomainsForUserPaginatedAppliesFilterAndSort(): void
+    public function testGetDomainsPaginatedAppliesFilterAndSort(): void
     {
-        $user = $this->createAccount('domain-pagination-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
-        $domainA = new Domain($user, 'alpha.example.com');
+        $domainA = new Domain('alpha.example.com');
         $domainA->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
-        $domainB = new Domain($user, 'beta.test.com');
+        $domainB = new Domain('beta.test.com');
         $domainB->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
-        $domainC = new Domain($user, 'zeta.example.com');
+        $domainC = new Domain('zeta.example.com');
         $domainC->setLastChecked(new \DateTimeImmutable('2024-01-01 00:00:00'));
 
         $this->entityManager->persist($domainA);
@@ -44,7 +42,7 @@ final class DomainRepositoryTest extends ApiIntegrationTestCase
         );
 
         $repository = self::getContainer()->get(DomainRepository::class);
-        $paginator = $repository->getDomainsForUserPaginated($user, $pagination);
+        $paginator = $repository->getDomainsPaginated($pagination);
         $results = iterator_to_array($paginator);
 
         self::assertCount(2, $results);

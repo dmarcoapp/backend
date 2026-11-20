@@ -10,11 +10,10 @@ use App\DTO\Output\User\WeeklyOverview\SourceSummary;
 use App\DTO\Output\User\WeeklyOverview\TrafficTotals;
 use App\DTO\Output\User\WeeklyOverview\WeeklyOverview;
 use App\Entity\DMARC\Domain;
-use App\Entity\User\User;
 use App\Enum\User\WeeklyFindingType;
 use App\Repository\DMARC\DomainRepository;
 use App\Repository\DMARC\ReportRepository;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
+use App\Service\Intake\IntakeAddresses;
 use Psr\Clock\ClockInterface;
 
 /**
@@ -37,19 +36,19 @@ final readonly class WeeklyOverviewProvider
     public function __construct(
         private ReportRepository $reportRepository,
         private DomainRepository $domainRepository,
-        private AggregateReportPostboxAddressProvider $postboxAddressProvider,
+        private IntakeAddresses $intakeAddresses,
         private ClockInterface $clock,
     ) {}
 
-    public function provide(User $user): WeeklyOverview
+    public function provide(): WeeklyOverview
     {
         [$week, $previousWeek] = self::lastFullWeeks($this->clock->now());
 
-        // Reports are sent by whoever knows the user's report address, so a
+        // Reports are sent by whoever knows the report address, so a
         // domain name that is no hostname never makes it into the email.
-        $trafficRows = self::onlyHostnames($this->reportRepository->getTrafficByDomain($week, $user));
-        $previousRows = self::onlyHostnames($this->reportRepository->getTrafficByDomain($previousWeek, $user));
-        $failingSources = self::onlyHostnames($this->reportRepository->getFailingSources($week, $user));
+        $trafficRows = self::onlyHostnames($this->reportRepository->getTrafficByDomain($week));
+        $previousRows = self::onlyHostnames($this->reportRepository->getTrafficByDomain($previousWeek));
+        $failingSources = self::onlyHostnames($this->reportRepository->getFailingSources($week));
 
         $messagesByDomain = [];
         foreach ($trafficRows as $row) {
@@ -57,8 +56,8 @@ final readonly class WeeklyOverviewProvider
         }
         $services = self::significantServices(self::collectServices($failingSources), $messagesByDomain);
 
-        $knownDomains = $this->knownDomains($user);
-        $domains = $this->summarizeDomains($user, $week, $trafficRows, $services, $knownDomains);
+        $knownDomains = $this->knownDomains();
+        $domains = $this->summarizeDomains($week, $trafficRows, $services, $knownDomains);
 
         $traffic = new TrafficTotals();
         foreach ($domains as $domain) {
@@ -72,7 +71,7 @@ final readonly class WeeklyOverviewProvider
 
         $reportingOrganizations = array_values(array_filter(array_map(
             static fn (array $organization): string => (string) $organization['reportingOrganization'],
-            $this->reportRepository->getTopReportingOrganizationsInDatePeriod($week, $user, self::REPORTING_ORGANIZATION_LIMIT),
+            $this->reportRepository->getTopReportingOrganizationsInDatePeriod($week, self::REPORTING_ORGANIZATION_LIMIT),
         )));
 
         return new WeeklyOverview(
@@ -80,7 +79,7 @@ final readonly class WeeklyOverviewProvider
             periodEnd: self::lastDay($week),
             previousPeriodStart: \DateTimeImmutable::createFromInterface($previousWeek->getStartDate()),
             previousPeriodEnd: self::lastDay($previousWeek),
-            reportCount: $this->reportRepository->getReportCountInDatePeriod($week, $user),
+            reportCount: $this->reportRepository->getReportCountInDatePeriod($week),
             reportingOrganizations: $reportingOrganizations,
             traffic: $traffic,
             previousTraffic: $previousTraffic,
@@ -91,7 +90,7 @@ final readonly class WeeklyOverviewProvider
                 ...self::newDomainFindings($domains),
                 ...self::quietDomainFindings($domains, $previousRows, $knownDomains),
             ],
-            reportAddress: $this->postboxAddressProvider->getAddressForUser($user),
+            reportAddress: $this->intakeAddresses->primary() ?? '',
         );
     }
 
@@ -121,10 +120,10 @@ final readonly class WeeklyOverviewProvider
      *
      * @return list<DomainSummary>
      */
-    private function summarizeDomains(User $user, \DatePeriod $week, array $trafficRows, array $services, array $knownDomains): array
+    private function summarizeDomains(\DatePeriod $week, array $trafficRows, array $services, array $knownDomains): array
     {
-        $policies = $this->reportRepository->getLatestPolicyByDomain($week, $user);
-        $firstReports = $this->reportRepository->getFirstReportDateByDomain($user);
+        $policies = $this->reportRepository->getLatestPolicyByDomain($week);
+        $firstReports = $this->reportRepository->getFirstReportDateByDomain();
         $weekStart = $week->getStartDate();
 
         $domains = [];
@@ -161,16 +160,16 @@ final readonly class WeeklyOverviewProvider
     }
 
     /**
-     * The user's domains by lower-cased name. Where reporters spelled a name
+     * The domains by lower-cased name. Where reporters spelled a name
      * in several ways, the lower-case one, or else the oldest, is the one the
      * email links to.
      *
      * @return array<array-key, Domain>
      */
-    private function knownDomains(User $user): array
+    private function knownDomains(): array
     {
         $known = [];
-        foreach ($this->domainRepository->findBy(['user' => $user], ['createdAt' => 'ASC']) as $domain) {
+        foreach ($this->domainRepository->findBy([], ['createdAt' => 'ASC']) as $domain) {
             $key = strtolower($domain->getDomain());
             if (!isset($known[$key]) || $domain->getDomain() === $key) {
                 $known[$key] = $domain;

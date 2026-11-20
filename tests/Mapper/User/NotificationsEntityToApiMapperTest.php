@@ -22,7 +22,6 @@ final class NotificationsEntityToApiMapperTest extends TestCase
         $user
             ->setName('Example User')
             ->setEmail('user@example.com')
-            ->setSharedPostboxIdentifierToken('shared-token')
             ->setUnusualNewLoginNotificationEnabled(true)
             ->setWeeklyOverviewNotificationEnabled(false)
         ;

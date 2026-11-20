@@ -24,6 +24,9 @@
         <env name="APP_ENV" value="test"/>
         <env name="APP_DEBUG" value="1"/>
         <env name="APP_SECRET" value="test-secret"/>
+        <env name="APP_DMARC_REPORT_XSD_PATH" value="%kernel.project_dir%/config/dmarc/rua.xsd"/>
+        <env name="APP_DMARC_RFC9990_REPORT_XSD_PATH" value="%kernel.project_dir%/config/dmarc/rfc9990.xsd"/>
+        <env name="APP_ENCRYPTION_KEY" value="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"/>
         <env name="APP_EMAIL_SENDER_ADDRESS" value="no-reply@example.test"/>
         <env name="APP_FRONTEND_URL" value="https://example.test"/>
         <env name="APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET" value="test-webhook-secret"/>
@@ -43,6 +46,9 @@
         <server name="APP_ENV" value="test"/>
         <server name="APP_DEBUG" value="1"/>
         <server name="APP_SECRET" value="test-secret"/>
+        <server name="APP_DMARC_REPORT_XSD_PATH" value="%kernel.project_dir%/config/dmarc/rua.xsd"/>
+        <server name="APP_DMARC_RFC9990_REPORT_XSD_PATH" value="%kernel.project_dir%/config/dmarc/rfc9990.xsd"/>
+        <server name="APP_ENCRYPTION_KEY" value="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"/>
         <server name="APP_EMAIL_SENDER_ADDRESS" value="no-reply@example.test"/>
         <server name="APP_FRONTEND_URL" value="https://example.test"/>
         <server name="APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET" value="test-webhook-secret"/>

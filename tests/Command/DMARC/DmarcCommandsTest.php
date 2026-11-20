@@ -6,13 +6,16 @@ namespace App\Tests\Command\DMARC;
 
 use App\Command\DMARC\Domain\ProcessDomainBulkCommand;
 use App\Command\DMARC\Domain\ProcessDomainCommand;
+use App\Command\DMARC\Domain\ProcessNewDomainsCommand;
+use App\Command\DMARC\Report\DeleteExpiredReportsCommand;
 use App\Command\DMARC\Report\ProcessReportBulkCommand;
 use App\Command\DMARC\Report\ProcessReportCommand;
 use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
+use App\Message\DMARC\DeleteExpiredReports;
 use App\Message\DMARC\ProcessDomain;
+use App\Message\DMARC\ProcessNewDomains;
 use App\Message\DMARC\ProcessReport;
 use App\Repository\DMARC\DomainRepository;
 use App\Repository\DMARC\ReportRepository;
@@ -27,8 +30,10 @@ use Symfony\Component\Uid\Uuid;
 /**
  * @internal
  */
+#[CoversClass(DeleteExpiredReportsCommand::class)]
 #[CoversClass(ProcessDomainCommand::class)]
 #[CoversClass(ProcessDomainBulkCommand::class)]
+#[CoversClass(ProcessNewDomainsCommand::class)]
 #[CoversClass(ProcessReportCommand::class)]
 #[CoversClass(ProcessReportBulkCommand::class)]
 final class DmarcCommandsTest extends ApiIntegrationTestCase
@@ -99,12 +104,7 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessDomainCommandFailsWhenDomainIdIsMissing(): void
     {
-        $user = new User();
-        $user->setEmail('missing-id-user@example.com');
-        $user->setName('Missing Id User');
-        $user->setSharedPostboxIdentifierToken('missing-id-token');
-
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
 
         $repository = $this->createStub(DomainRepository::class);
         $repository->method('find')->willReturn($domain);
@@ -186,12 +186,7 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
 
     public function testProcessDomainBulkCommandSkipsDomainsWithoutId(): void
     {
-        $user = new User();
-        $user->setEmail('bulk-skip@example.com');
-        $user->setName('Bulk Skip');
-        $user->setSharedPostboxIdentifierToken('bulk-skip-token');
-
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
 
         $repository = $this->createStub(DomainRepository::class);
         $repository->method('getDomainsForRegularProcessing')->willReturn([$domain]);
@@ -343,11 +338,7 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
 
     private function createDomain(): Domain
     {
-        $user = new User();
-        $user->setEmail('user@example.com');
-        $user->setSharedPostboxIdentifierToken('token');
-
-        $domain = new Domain($user, 'example.com');
+        $domain = new Domain('example.com');
         $this->setEntityId($domain, Uuid::v4());
 
         return $domain;
@@ -355,8 +346,6 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
 
     private function createReport(bool $isProcessed = true): Report
     {
-        $user = $this->createAccount('report-cmd-'.uniqid('', true).'@example.com', 'Str0ngPassw0rd!@#');
-
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable('-1 day'))
@@ -365,7 +354,6 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $report = new Report();
@@ -389,6 +377,42 @@ final class DmarcCommandsTest extends ApiIntegrationTestCase
         $this->entityManager->flush();
 
         return $report;
+    }
+
+    public function testDeleteExpiredReportsCommandDispatches(): void
+    {
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(DeleteExpiredReports::class))
+            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
+        ;
+
+        $command = new DeleteExpiredReportsCommand($messageBus);
+        $tester = new CommandTester($command);
+        $tester->execute([]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertSame('app:dmarc:report:delete-expired', $command->getName());
+    }
+
+    public function testProcessNewDomainsCommandDispatches(): void
+    {
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(ProcessNewDomains::class))
+            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
+        ;
+
+        $command = new ProcessNewDomainsCommand($messageBus);
+        $tester = new CommandTester($command);
+        $tester->execute([]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertSame('app:dmarc:domain:process-new', $command->getName());
     }
 
     private function setEntityId(object $entity, Uuid $id): void

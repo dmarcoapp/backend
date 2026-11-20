@@ -15,5 +15,7 @@ framework:
                 adapter: cache.adapter.filesystem
             dashboard_cache_pool:
                 adapter: cache.adapter.array
+            report_intake_rate_limiter_pool:
+                adapter: cache.adapter.array
             ip_lookup_cache_pool:
                 adapter: cache.adapter.array

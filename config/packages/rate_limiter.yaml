@@ -12,6 +12,13 @@ framework:
             cache_pool: logged_in_api_rate_limiter_pool
         # A wrong two-factor code is not an authentication failure, so login
         # throttling never sees it and the six digits would be free to guess.
+        # Report uploads with an API key, per client address, counted before
+        # the key is checked.
+        report_intake:
+            policy: 'sliding_window'
+            limit: 600
+            interval: '1 hour'
+            cache_pool: report_intake_rate_limiter_pool
         two_factor:
             policy: 'fixed_window'
             limit: 5

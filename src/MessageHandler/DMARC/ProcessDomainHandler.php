@@ -7,7 +7,8 @@ namespace App\MessageHandler\DMARC;
 use App\Helper\DMARC;
 use App\Message\DMARC\ProcessDomain;
 use App\Repository\DMARC\DomainRepository;
-use App\Service\Email\AggregateReportPostboxAddressProvider;
+use App\Service\Intake\IntakeAddress;
+use App\Service\Intake\IntakeAddresses;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
@@ -17,7 +18,7 @@ final readonly class ProcessDomainHandler
     public function __construct(
         private DomainRepository $domainRepository,
         private EntityManagerInterface $entityManager,
-        private AggregateReportPostboxAddressProvider $aggregateReportPostboxAddressProvider,
+        private IntakeAddresses $intakeAddresses,
     ) {}
 
     public function __invoke(ProcessDomain $message): void
@@ -29,7 +30,7 @@ final readonly class ProcessDomainHandler
 
         $domain->setLastChecked(new \DateTimeImmutable());
 
-        $sharedPostboxAddress = $this->aggregateReportPostboxAddressProvider->getAddressForUser($domain->getUser());
+        $intakeAddresses = array_map(static fn (IntakeAddress $address): string => $address->address, $this->intakeAddresses->all());
 
         $dmarcHost = sprintf('_dmarc.%s', $domain->getDomain());
 
@@ -45,7 +46,10 @@ final readonly class ProcessDomainHandler
                 if (isset($record['txt']) && str_starts_with($record['txt'], 'v=DMARC1')) {
                     $domain->setDmarcRecord($record['txt']);
                     $domain->setProtectionLevel(DMARC::dmarcProtectionLevel($record['txt']));
-                    $domain->setIsConfiguredCorrectly(DMARC::checkConfiguration($record['txt'], $sharedPostboxAddress));
+                    $domain->setIsConfiguredCorrectly(array_any(
+                        $intakeAddresses,
+                        static fn (string $address): bool => DMARC::checkConfiguration($record['txt'], $address),
+                    ));
 
                     break;
                 }

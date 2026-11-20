@@ -7,7 +7,6 @@ namespace App\Tests\Command\Email;
 use App\Command\Email\ProcessEmailBulkCommand;
 use App\Command\Email\ProcessEmailCommand;
 use App\Entity\Email\Email;
-use App\Entity\User\User;
 use App\Message\Email\ProcessEmail;
 use App\Repository\Email\EmailRepository;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -165,10 +164,6 @@ final class EmailCommandsTest extends TestCase
 
     private function createEmail(): Email
     {
-        $user = new User();
-        $user->setEmail('user@example.com');
-        $user->setSharedPostboxIdentifierToken('token');
-
         $email = new Email();
         $email
             ->setCreatedAt(new \DateTimeImmutable())
@@ -177,7 +172,6 @@ final class EmailCommandsTest extends TestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
-            ->setOwner($user)
         ;
 
         $this->setEntityId($email, Uuid::v4());
