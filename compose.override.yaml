@@ -26,7 +26,7 @@ services:
     build:
       context: .
       target: frankenphp_dev
-    command: sh -c "sleep 10 && php bin/console messenger:consume --all --memory-limit=128M --time-limit=3600 -vv"
+    command: sh -c "sleep 10 && php bin/console messenger:consume async async_low scheduler_default --memory-limit=128M --time-limit=3600 -vv"
     volumes:
       - ./:/app
     environment:
@@ -55,7 +55,3 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 ###< symfony/mailer ###
-
-  rabbitmq:
-    ports:
-      - "127.0.0.1:15672:15672"  # Web UI management console

@@ -41,7 +41,7 @@
         <env name="MESSENGER_ASYNC_HIGH_TRANSPORT_DSN" value="sync://"/>
         <env name="LOCK_DSN" value="flock"/>
         <env name="CORS_ALLOW_ORIGIN" value="^https?://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$"/>
-        <env name="REDIS_DSN" value="redis://redis"/>
+        <env name="REDIS_DSN" value="redis://valkey:6379/0"/>
         <env name="SYMFONY_DEPRECATIONS_HELPER" value="disabled"/>
         <server name="APP_ENV" value="test"/>
         <server name="APP_DEBUG" value="1"/>
@@ -63,7 +63,7 @@
         <server name="MESSENGER_ASYNC_HIGH_TRANSPORT_DSN" value="sync://"/>
         <server name="LOCK_DSN" value="flock"/>
         <server name="CORS_ALLOW_ORIGIN" value="^https?://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$"/>
-        <server name="REDIS_DSN" value="redis://redis"/>
+        <server name="REDIS_DSN" value="redis://valkey:6379/0"/>
         <server name="SYMFONY_DEPRECATIONS_HELPER" value="disabled"/>
         <ini name="display_errors" value="1"/>
         <ini name="error_reporting" value="-1"/>

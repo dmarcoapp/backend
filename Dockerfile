@@ -31,6 +31,7 @@ RUN set -eux; \
 		opcache \
 		zip \
         amqp \
+        redis \
         dom \
         libxml \
 	;

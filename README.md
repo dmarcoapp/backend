@@ -38,8 +38,8 @@ being retired, posts them as a signed webhook. See
 
 ```text
 mailbox, read over IMAP  ----.
-upload with an API key   ----+--> backend -> RabbitMQ workers -> PostgreSQL
-mail gateway's webhook   ----'                                -> REST API
+upload with an API key   ----+--> backend -> Valkey queue -> worker -> PostgreSQL
+mail gateway's webhook   ----'                                      -> REST API
 ```
 
 Services in the Docker stack:
@@ -48,8 +48,7 @@ Services in the Docker stack:
 - `worker`: Symfony Messenger consumer for async report processing and scheduled
   work
 - `database`: PostgreSQL
-- `rabbitmq`: async queue
-- `redis`: cache backend
+- `valkey`: cache, locks, and the message queues
 
 ## Features
 
@@ -131,9 +130,9 @@ Important settings:
 | `APP_FRONTEND_URL` | Frontend URL used in emails and links |
 | `CORS_ALLOW_ORIGIN` | Allowed browser origins for the API |
 | `DATABASE_URL` | PostgreSQL connection URL |
-| `MESSENGER_ASYNC_HIGH_TRANSPORT_DSN` | High-priority Messenger transport |
-| `MESSENGER_ASYNC_LOW_TRANSPORT_DSN` | Low-priority Messenger transport |
-| `REDIS_DSN` | Redis cache provider |
+| `MESSENGER_ASYNC_HIGH_TRANSPORT_DSN` | High-priority Messenger transport, a Valkey stream |
+| `MESSENGER_ASYNC_LOW_TRANSPORT_DSN` | Low-priority Messenger transport, a Valkey stream |
+| `REDIS_DSN` | Valkey cache provider (Valkey speaks the Redis protocol) |
 | `LOCK_DSN` | Symfony Lock backend |
 | `JWT_SECRET_KEY` / `JWT_PUBLIC_KEY` / `JWT_PASSPHRASE` | JWT signing key configuration |
 
@@ -287,9 +286,6 @@ docker compose -f compose.yaml -f compose.prod.yaml build --pull --no-cache
 SERVER_NAME=:80 \
 APP_SECRET='<secure random value>' \
 POSTGRES_PASSWORD='<secure random value>' \
-RABBITMQ_DEFAULT_USER='<rabbitmq user>' \
-RABBITMQ_DEFAULT_PASS='<secure random value>' \
-REDIS_DSN='redis://redis' \
 APP_ENCRYPTION_KEY='<openssl rand -hex 32>' \
 APP_FRONTEND_URL='https://dash.example.com' \
 CORS_ALLOW_ORIGIN='^https://dash\.example\.com$' \
@@ -306,7 +302,8 @@ Before exposing the service:
 
 - Replace all default secrets and credentials.
 - Generate deployment-specific JWT keys.
-- Configure PostgreSQL, RabbitMQ, and Redis for durable production use.
+- Configure PostgreSQL and Valkey for durable production use. Valkey holds the
+  message queues, so keep its append-only file on.
 - Set up outgoing mail on the dashboard's Platform page if you want
   notification emails.
 - Restrict `CORS_ALLOW_ORIGIN` to trusted frontend origins.

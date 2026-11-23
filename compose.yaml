@@ -16,11 +16,11 @@ services:
   worker:
     image: ${IMAGES_PREFIX:-}app-php
     restart: unless-stopped
-    command: sh -c "sleep 20 && php bin/console messenger:consume --all --no-ansi --memory-limit=128M --time-limit=3600"
+    command: sh -c "sleep 20 && php bin/console messenger:consume async async_low scheduler_default --no-ansi --memory-limit=128M --time-limit=3600"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-!ChangeMe!}@database:5432/${POSTGRES_DB:-app}?serverVersion=${POSTGRES_VERSION:-15}&charset=${POSTGRES_CHARSET:-utf8}
     depends_on:
-      - rabbitmq
+      - valkey
       - database
 
 ###> doctrine/doctrine-bundle ###
@@ -43,34 +43,22 @@ services:
       # - ./docker/db/data:/var/lib/postgresql/data:rw
 ###< doctrine/doctrine-bundle ###
 
-  redis:
-    image: redis:alpine
+  # Cache, locks, and the message queues. The append-only file keeps queued
+  # messages across a restart.
+  valkey:
+    image: valkey/valkey:9-alpine
     restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:
-      - redis_data:/data
+      - valkey_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       retries: 3
       timeout: 5s
-
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
 volumes:
   caddy_data:
   caddy_config:
   jwt_keys:
   database_data:
-  redis_data:
-  rabbitmq_data:
+  valkey_data:
