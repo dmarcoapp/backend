@@ -19,7 +19,9 @@ class PlatformSettings
 {
     public const int ID = 1;
     public const string SMTP_PASSWORD_CONTEXT = 'platform_settings:smtp_password:1';
-    public const string GATEWAY_SECRET_CONTEXT = 'platform_settings:gateway_secret:1';
+    // Bound into every encrypted secret, so it keeps the name it was first
+    // stored under: a new one would make the stored secret unreadable.
+    public const string WEBHOOK_SECRET_CONTEXT = 'platform_settings:gateway_secret:1';
 
     #[ORM\Id]
     #[ORM\Column]
@@ -62,18 +64,25 @@ class PlatformSettings
     private ?string $senderAddress = null;
 
     /**
-     * Whether reports may arrive through the API, from a mail gateway or with
-     * an API key. Off unless switched on.
+     * Whether reports may arrive through the API at all. The upload endpoint
+     * and the webhook each have a switch of their own besides. All three are
+     * off unless switched on.
      */
     #[ORM\Column(nullable: true)]
     private ?bool $apiIntakeEnabled = null;
 
+    #[ORM\Column(nullable: true)]
+    private ?bool $uploadEndpointEnabled = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $webhookEnabled = null;
+
     /**
-     * The secret a mail gateway signs its webhooks with, encrypted with
-     * SecretBox under GATEWAY_SECRET_CONTEXT.
+     * The secret a mail gateway signs its requests to the webhook with,
+     * encrypted with SecretBox under WEBHOOK_SECRET_CONTEXT.
      */
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    private ?string $gatewaySecret = null;
+    private ?string $webhookSecret = null;
 
     /**
      * When each environment variable was taken over, by name.
@@ -235,14 +244,38 @@ class PlatformSettings
         return $this->touch();
     }
 
-    public function getEncryptedGatewaySecret(): ?string
+    public function isUploadEndpointEnabled(): ?bool
     {
-        return $this->gatewaySecret;
+        return $this->uploadEndpointEnabled;
     }
 
-    public function setEncryptedGatewaySecret(?string $gatewaySecret): static
+    public function setUploadEndpointEnabled(?bool $uploadEndpointEnabled): static
     {
-        $this->gatewaySecret = $gatewaySecret;
+        $this->uploadEndpointEnabled = $uploadEndpointEnabled;
+
+        return $this->touch();
+    }
+
+    public function isWebhookEnabled(): ?bool
+    {
+        return $this->webhookEnabled;
+    }
+
+    public function setWebhookEnabled(?bool $webhookEnabled): static
+    {
+        $this->webhookEnabled = $webhookEnabled;
+
+        return $this->touch();
+    }
+
+    public function getEncryptedWebhookSecret(): ?string
+    {
+        return $this->webhookSecret;
+    }
+
+    public function setEncryptedWebhookSecret(?string $webhookSecret): static
+    {
+        $this->webhookSecret = $webhookSecret;
 
         return $this->touch();
     }

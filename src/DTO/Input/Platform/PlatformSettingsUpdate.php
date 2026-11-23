@@ -41,6 +41,10 @@ final readonly class PlatformSettingsUpdate
         public ?string $senderAddress = null,
         #[Assert\Type(type: 'bool')]
         public ?bool $apiIntakeEnabled = null,
+        #[Assert\Type(type: 'bool')]
+        public ?bool $uploadEndpointEnabled = null,
+        #[Assert\Type(type: 'bool')]
+        public ?bool $webhookEnabled = null,
         // The domain of the mail gateway's report address. Empty removes it.
         #[Assert\Length(max: 255)]
         #[Assert\AtLeastOneOf([

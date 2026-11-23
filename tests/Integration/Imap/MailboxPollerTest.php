@@ -71,7 +71,7 @@ final class MailboxPollerTest extends ApiIntegrationTestCase
         self::assertSame(1, $result->imported);
         self::assertSame(1, $result->skipped);
 
-        $emails = $this->entityManager->getRepository(Email::class)->findBy(['source' => ReportSource::IMAP]);
+        $emails = $this->entityManager->getRepository(Email::class)->findBy(['source' => ReportSource::MAILBOX]);
         self::assertCount(1, $emails);
         self::assertSame('noreply-dmarc-support@google.com', $emails[0]->getFromAddress());
         self::assertSame('dmarc@example.test', $emails[0]->getToAddress());

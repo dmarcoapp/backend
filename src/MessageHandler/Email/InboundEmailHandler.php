@@ -93,8 +93,9 @@ final readonly class InboundEmailHandler
             return;
         }
 
-        $createdAt = $message->email->created_at;
-        if (!$createdAt instanceof \DateTimeImmutable) {
+        // A payload without it is malformed, even though the time stored is
+        // DMARCo's own.
+        if (!$message->email->created_at instanceof \DateTimeImmutable) {
             $this->logger->error('Inbound email created_at is missing.', [
                 'messageId' => $messageId,
             ]);
@@ -103,11 +104,10 @@ final readonly class InboundEmailHandler
         }
 
         $this->ingestor->ingest(new IncomingReport(
-            source: ReportSource::GATEWAY,
+            source: ReportSource::WEBHOOK,
             messageId: $messageId,
             fromAddress: $from,
             toAddress: $toAddress,
-            receivedAt: $createdAt,
             filename: $attachmentFilename,
             xml: $xmlContent,
         ));

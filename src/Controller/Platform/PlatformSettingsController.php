@@ -118,6 +118,12 @@ final class PlatformSettingsController extends AbstractController
         if (null !== $input->apiIntakeEnabled) {
             $settings->setApiIntakeEnabled($input->apiIntakeEnabled);
         }
+        if (null !== $input->uploadEndpointEnabled) {
+            $settings->setUploadEndpointEnabled($input->uploadEndpointEnabled);
+        }
+        if (null !== $input->webhookEnabled) {
+            $settings->setWebhookEnabled($input->webhookEnabled);
+        }
 
         if (null !== $input->reportAddressDomain) {
             $domain = strtolower(trim($input->reportAddressDomain));

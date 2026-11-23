@@ -6,7 +6,7 @@ namespace App\Service\Intake;
 
 final readonly class IntakeAddress
 {
-    public const string GATEWAY = 'gateway';
+    public const string WEBHOOK = 'webhook';
     public const string MAILBOX = 'mailbox';
 
     public function __construct(

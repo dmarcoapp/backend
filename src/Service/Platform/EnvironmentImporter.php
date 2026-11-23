@@ -46,7 +46,7 @@ final readonly class EnvironmentImporter
             }
 
             $outcome = match ($name) {
-                LegacyEnvironment::GATEWAY_SECRET => $this->importGatewaySecret($settings, $value),
+                LegacyEnvironment::WEBHOOK_SECRET => $this->importWebhookSecret($settings, $value),
                 LegacyEnvironment::IP_LOOKUP_ENABLED => $this->importIpLookup($settings, $value),
                 LegacyEnvironment::MAILER_DSN => $this->importMailerDsn($settings, $value),
                 LegacyEnvironment::REPORT_DOMAIN => $this->importReportDomain($settings, $value),
@@ -76,18 +76,21 @@ final readonly class EnvironmentImporter
     }
 
     /**
-     * A gateway with a secret was a gateway in use, so the API it posts to
-     * stays switched on.
+     * A gateway with a secret was a gateway in use, so the API and its
+     * webhook stay switched on.
      */
-    private function importGatewaySecret(PlatformSettings $settings, string $value): string
+    private function importWebhookSecret(PlatformSettings $settings, string $value): string
     {
-        if (null !== $settings->getEncryptedGatewaySecret()) {
+        if (null !== $settings->getEncryptedWebhookSecret()) {
             return self::KEPT;
         }
 
-        $settings->setEncryptedGatewaySecret($this->provider->encryptGatewaySecret($value));
+        $settings->setEncryptedWebhookSecret($this->provider->encryptWebhookSecret($value));
         if (null === $settings->isApiIntakeEnabled()) {
             $settings->setApiIntakeEnabled(true);
+        }
+        if (null === $settings->isWebhookEnabled()) {
+            $settings->setWebhookEnabled(true);
         }
 
         return self::IMPORTED;

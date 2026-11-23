@@ -42,7 +42,10 @@ final class PlatformSettingsApi
     public ?string $reportAddressDomain = null;
 
     public bool $apiIntakeEnabled = false;
-    public bool $gatewaySecretSet = false;
+    // What the switches say, apart from the API switch above them.
+    public bool $uploadEndpointEnabled = false;
+    public bool $webhookEnabled = false;
+    public bool $webhookSecretSet = false;
 
     /**
      * Settings still set in the environment that nothing reads any more.

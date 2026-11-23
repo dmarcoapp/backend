@@ -64,8 +64,10 @@ final class EnvironmentImporterTest extends TestCase
         self::assertSame('user@example.com', $settings->getSmtpUsername());
         self::assertStringNotContainsString('word', (string) $settings->getEncryptedSmtpPassword());
         self::assertSame('p@ss/word', $provider->smtpPassword());
-        self::assertSame('gateway-secret', $provider->gatewaySecret());
+        self::assertSame('gateway-secret', $provider->webhookSecret());
         self::assertTrue($settings->isApiIntakeEnabled());
+        self::assertTrue($settings->isWebhookEnabled());
+        self::assertNull($settings->isUploadEndpointEnabled());
         self::assertSame(LegacyEnvironment::SETTINGS, array_keys($settings->getImportedFromEnvironment()));
     }
 

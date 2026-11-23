@@ -34,7 +34,7 @@ final class CreateApiKeyCommand extends Command
     {
         $this
             ->addArgument('name', InputArgument::OPTIONAL, 'A name to tell the key by', 'Default')
-            ->addOption('enable-api', null, InputOption::VALUE_NONE, 'Switch report intake through the API on as well')
+            ->addOption('enable-api', null, InputOption::VALUE_NONE, 'Switch the API and its upload endpoint on as well')
             ->addOption('quiet-key', null, InputOption::VALUE_NONE, 'Print the key alone, for a script to read')
         ;
     }
@@ -59,7 +59,7 @@ final class CreateApiKeyCommand extends Command
 
         if ($input->getOption('enable-api')) {
             $settings = $this->settings->settings();
-            $settings->setApiIntakeEnabled(true);
+            $settings->setApiIntakeEnabled(true)->setUploadEndpointEnabled(true);
             $this->settingsRepository->save($settings);
         }
 

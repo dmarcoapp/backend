@@ -49,7 +49,7 @@ final class MailboxController extends AbstractController
     #[OA\Get(summary: 'Lists the mailboxes reports are fetched from.', security: [['Bearer' => []]])]
     #[OA\Response(response: 200, description: 'The mailboxes.', content: new OA\JsonContent(type: 'array', items: new OA\Items(ref: new Model(type: MailboxApi::class))))]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes', name: 'app_mailbox_list', methods: [Request::METHOD_GET])]
+    #[Route('/v1/platform/intake/mailboxes', name: 'app_intake_mailbox_list', methods: [Request::METHOD_GET])]
     public function list(): JsonResponse
     {
         $this->assertPlatformMode();
@@ -60,7 +60,7 @@ final class MailboxController extends AbstractController
     #[OA\Post(summary: 'Adds a mailbox.', security: [['Bearer' => []]])]
     #[OA\Response(response: 201, description: 'The mailbox.', content: new Model(type: MailboxApi::class))]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes', name: 'app_mailbox_create', methods: [Request::METHOD_POST])]
+    #[Route('/v1/platform/intake/mailboxes', name: 'app_intake_mailbox_create', methods: [Request::METHOD_POST])]
     public function create(
         #[MapRequestPayload(validationGroups: ['Default', MailboxInput::CREATE])]
         MailboxInput $input,
@@ -81,7 +81,7 @@ final class MailboxController extends AbstractController
     #[OA\Patch(summary: 'Changes a mailbox. A field left out stays as it is.', security: [['Bearer' => []]])]
     #[OA\Response(response: 200, description: 'The mailbox.', content: new Model(type: MailboxApi::class))]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes/{mailbox}', name: 'app_mailbox_update', methods: [Request::METHOD_PATCH])]
+    #[Route('/v1/platform/intake/mailboxes/{mailbox}', name: 'app_intake_mailbox_update', methods: [Request::METHOD_PATCH])]
     public function update(
         Mailbox $mailbox,
         #[MapRequestPayload]
@@ -103,7 +103,7 @@ final class MailboxController extends AbstractController
     #[OA\Delete(summary: 'Removes a mailbox. The reports fetched from it stay.', security: [['Bearer' => []]])]
     #[OA\Response(response: 204, description: 'Removed.')]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes/{mailbox}', name: 'app_mailbox_delete', methods: [Request::METHOD_DELETE])]
+    #[Route('/v1/platform/intake/mailboxes/{mailbox}', name: 'app_intake_mailbox_delete', methods: [Request::METHOD_DELETE])]
     public function delete(Mailbox $mailbox): Response
     {
         $this->assertPlatformMode();
@@ -115,7 +115,7 @@ final class MailboxController extends AbstractController
     #[OA\Post(summary: 'Signs in to a mailbox and looks at its folders, without reading any message.', security: [['Bearer' => []]])]
     #[OA\Response(response: 200, description: 'Whether it worked, and why not.', content: new Model(type: MailboxTestResultApi::class))]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes/{mailbox}/test', name: 'app_mailbox_test', methods: [Request::METHOD_POST])]
+    #[Route('/v1/platform/intake/mailboxes/{mailbox}/test', name: 'app_intake_mailbox_test', methods: [Request::METHOD_POST])]
     public function test(Mailbox $mailbox): JsonResponse
     {
         $this->assertPlatformMode();
@@ -127,7 +127,7 @@ final class MailboxController extends AbstractController
     #[OA\Post(summary: 'Reads the mailbox now, instead of at its next turn.', security: [['Bearer' => []]])]
     #[OA\Response(response: 202, description: 'Queued.')]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes/{mailbox}/poll', name: 'app_mailbox_poll', methods: [Request::METHOD_POST])]
+    #[Route('/v1/platform/intake/mailboxes/{mailbox}/poll', name: 'app_intake_mailbox_poll', methods: [Request::METHOD_POST])]
     public function poll(Mailbox $mailbox): JsonResponse
     {
         $this->assertPlatformMode();
@@ -139,7 +139,7 @@ final class MailboxController extends AbstractController
     #[OA\Get(summary: 'What happened when the mailbox was last read, newest first.', security: [['Bearer' => []]])]
     #[OA\Response(response: 200, description: 'The latest entries.', content: new OA\JsonContent(type: 'array', items: new OA\Items(ref: new Model(type: MailboxLogEntryApi::class))))]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/mailboxes/{mailbox}/log', name: 'app_mailbox_log', methods: [Request::METHOD_GET])]
+    #[Route('/v1/platform/intake/mailboxes/{mailbox}/log', name: 'app_intake_mailbox_log', methods: [Request::METHOD_GET])]
     public function log(Mailbox $mailbox): JsonResponse
     {
         $this->assertPlatformMode();

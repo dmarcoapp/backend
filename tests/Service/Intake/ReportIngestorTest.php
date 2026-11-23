@@ -50,8 +50,12 @@ final class ReportIngestorTest extends TestCase
         self::assertSame('noreply-dmarc-support@google.com', $saved->getFromAddress());
         self::assertSame('google.com!example.com!1!2.xml', $saved->getAttachmentFilename());
         self::assertSame('application/xml', $saved->getAttachmentContentType());
-        self::assertSame(ReportSource::IMAP, $saved->getSource());
+        self::assertSame(ReportSource::MAILBOX, $saved->getSource());
         self::assertSame('<feedback/>', $saved->getAttachmentContent());
+        // The time it was stored, whatever date the mail itself carries, so
+        // the cleanup of emails that never became a report cannot take one
+        // that is still waiting to be processed.
+        self::assertEqualsWithDelta(time(), $saved->getCreatedAt()?->getTimestamp(), 5);
     }
 
     public function testRecognizesAReportAlreadyReceived(): void
@@ -108,11 +112,10 @@ final class ReportIngestorTest extends TestCase
     private function report(string $from = 'noreply@example.net', string $filename = 'report.xml'): IncomingReport
     {
         return new IncomingReport(
-            source: ReportSource::IMAP,
+            source: ReportSource::MAILBOX,
             messageId: '<id@example.com>',
             fromAddress: $from,
             toAddress: 'reports@example.com',
-            receivedAt: new \DateTimeImmutable('2026-11-01 10:00:00 UTC'),
             filename: $filename,
             xml: '<feedback/>',
         );

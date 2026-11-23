@@ -51,15 +51,15 @@ final class IntakeSettingsTest extends ApiIntegrationTestCase
         self::assertSame(422, $this->call('POST', '/v1/platform/intake/keys', ['name' => "two\nlines"])['status']);
     }
 
-    public function testMakesAndRemovesTheGatewaySecret(): void
+    public function testMakesAndRemovesTheWebhookSecret(): void
     {
-        $created = $this->call('POST', '/v1/platform/intake/gateway-secret');
+        $created = $this->call('POST', '/v1/platform/intake/webhook-secret');
         self::assertSame(201, $created['status']);
         self::assertSame(48, strlen((string) $created['body']['secret']));
-        self::assertTrue($this->call('GET', '/v1/platform/settings')['body']['gatewaySecretSet']);
+        self::assertTrue($this->call('GET', '/v1/platform/settings')['body']['webhookSecretSet']);
 
-        self::assertSame(204, $this->call('DELETE', '/v1/platform/intake/gateway-secret')['status']);
-        self::assertFalse($this->call('GET', '/v1/platform/settings')['body']['gatewaySecretSet']);
+        self::assertSame(204, $this->call('DELETE', '/v1/platform/intake/webhook-secret')['status']);
+        self::assertFalse($this->call('GET', '/v1/platform/settings')['body']['webhookSecretSet']);
     }
 
     public function testListsTheAddressesReportsComeInAt(): void
@@ -69,14 +69,21 @@ final class IntakeSettingsTest extends ApiIntegrationTestCase
         $changed = $this->call('PATCH', '/v1/platform/settings', ['apiIntakeEnabled' => true, 'reportAddressDomain' => 'Reports.Example.com']);
         self::assertSame(200, $changed['status']);
         self::assertTrue($changed['body']['apiIntakeEnabled']);
+        self::assertFalse($changed['body']['webhookEnabled']);
         self::assertSame('reports.example.com', $changed['body']['reportAddressDomain']);
+
+        // The webhook's address is offered only while the webhook is on.
+        self::assertSame([], $this->call('GET', '/v1/platform/intake/addresses')['body']);
+        $changed = $this->call('PATCH', '/v1/platform/settings', ['webhookEnabled' => true, 'uploadEndpointEnabled' => true]);
+        self::assertTrue($changed['body']['webhookEnabled']);
+        self::assertTrue($changed['body']['uploadEndpointEnabled']);
 
         $addresses = $this->call('GET', '/v1/platform/intake/addresses')['body'];
         self::assertCount(1, $addresses);
-        self::assertSame('gateway', $addresses[0]['kind']);
+        self::assertSame('webhook', $addresses[0]['kind']);
         self::assertStringEndsWith('@reports.example.com', $addresses[0]['address']);
 
-        $this->call('POST', '/v1/platform/mailboxes', [
+        $this->call('POST', '/v1/platform/intake/mailboxes', [
             'host' => 'imap.example.com',
             'name' => 'Reports',
             'password' => 'secret',
@@ -85,7 +92,7 @@ final class IntakeSettingsTest extends ApiIntegrationTestCase
         ]);
 
         $addresses = $this->call('GET', '/v1/platform/intake/addresses')['body'];
-        self::assertSame(['gateway', 'mailbox'], array_column($addresses, 'kind'));
+        self::assertSame(['webhook', 'mailbox'], array_column($addresses, 'kind'));
         self::assertSame('dmarc@example.com', $addresses[1]['address']);
     }
 

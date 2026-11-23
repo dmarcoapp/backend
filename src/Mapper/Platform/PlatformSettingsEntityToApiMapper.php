@@ -46,9 +46,11 @@ final readonly class PlatformSettingsEntityToApiMapper implements MapperInterfac
         $dto->reportAddress = $this->reportAddressProvider->getAddress();
         $dto->reportAddressDomain = $this->settings->reportAddressDomain();
         $dto->apiIntakeEnabled = $this->settings->isApiIntakeEnabled();
-        $dto->gatewaySecretSet = $legacy
-            ? null !== $this->settings->gatewaySecret()
-            : null !== $entity->getEncryptedGatewaySecret();
+        $dto->uploadEndpointEnabled = !$legacy && true === $entity->isUploadEndpointEnabled();
+        $dto->webhookEnabled = $legacy ? $dto->apiIntakeEnabled : true === $entity->isWebhookEnabled();
+        $dto->webhookSecretSet = $legacy
+            ? null !== $this->settings->webhookSecret()
+            : null !== $entity->getEncryptedWebhookSecret();
         $dto->unusedEnvironment = $this->settings->unusedEnvironment();
         $dto->importedFromEnvironment = $entity->getImportedFromEnvironment();
 

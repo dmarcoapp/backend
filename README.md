@@ -150,7 +150,8 @@ variables that held them before: `MAILER_DSN`, `APP_EMAIL_SENDER_ADDRESS`,
 `APP_REPORT_RETENTION_DAYS`, `APP_IP_LOOKUP_ENABLED`,
 `APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN`, and
 `APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET`. A webhook secret taken over this way
-switches API intake on, so the gateway keeps working. Once there is a key, the
+switches the API and its webhook on, so the gateway keeps working. Once there is
+a key, the
 image runs `bin/console app:platform:import-env` on every start. It takes over
 the variables an operator set, never the defaults committed in `.env`, and never
 overwrites a setting already made. From then on the variables are ignored, and
@@ -164,9 +165,9 @@ about comes from the report itself, so any of them can carry any domain.
 ### Mailboxes over IMAP
 
 Mailboxes are added on the dashboard's Platform page, through
-`/v1/platform/mailboxes`, or with `bin/console app:mailbox:add`, which reads the
-password from `DMARCO_MAILBOX_PASSWORD` or a hidden prompt. Passwords are stored
-encrypted with `APP_ENCRYPTION_KEY`.
+`/v1/platform/intake/mailboxes`, or with `bin/console app:intake:mailbox:add`,
+which reads the password from `DMARCO_MAILBOX_PASSWORD` or a hidden prompt.
+Passwords are stored encrypted with `APP_ENCRYPTION_KEY`.
 
 The worker reads each mailbox on its own schedule, every 15 minutes by default:
 
@@ -180,9 +181,13 @@ The worker reads each mailbox on its own schedule, every 15 minutes by default:
 - At most 100 messages per read, none over 10 MB, one report attachment each.
 - After five failed reads in a row a mailbox is tried hourly.
 
-### Uploads with an API key
+The API has a switch of its own on the Platform page, and so do its two
+endpoints, the upload endpoint and the webhook. An endpoint takes reports only
+while it and the API are both switched on.
 
-With API intake switched on, a report file goes to:
+### Upload endpoint
+
+With the upload endpoint switched on, a report file goes to:
 
 ```text
 POST /v1/intake/reports
@@ -194,18 +199,21 @@ answer is `202` when it is stored, `200` when it was stored before, and `422`
 with the reason when it is not a report. `X-Report-From`, `X-Report-Recipient`,
 and `X-Report-Filename` are recorded when given. Keys are made and revoked on
 the Platform page, or with `bin/console app:intake:api-key:create`. Only a hash
-of each key is kept.
+of each key is kept. While the endpoint is off, it answers `404`.
 
-### Mail gateway webhook
+### Webhook
 
-With API intake switched on and a gateway secret set, the backend accepts
-inbound report notifications at the address below. Otherwise it answers `503`,
-which the gateway takes as a reason to keep the report and try again later.
-The endpoint is:
+With the webhook switched on and a secret set, the backend accepts reports from
+a mail gateway at the address below. Otherwise it answers `503`, which the
+gateway takes as a reason to keep the report and try again later. The endpoint
+is:
 
 ```text
-POST /v1/webhook/inbound_report_email
+POST /v1/intake/webhook
 ```
+
+Gateways set up before 0.5 post to `/v1/webhook/inbound_report_email`, which
+answers the same way.
 
 The request must include these headers:
 
@@ -215,7 +223,7 @@ The request must include these headers:
 Signature:
 
 ```text
-HMAC_SHA256(timestamp + "." + raw_body, gateway secret)
+HMAC_SHA256(timestamp + "." + raw_body, webhook secret)
 ```
 
 Example payload:
@@ -240,7 +248,7 @@ Example payload:
 Message handling:
 
 - The webhook verifies the HMAC signature before dispatching work.
-- The first recipient address must be the gateway's report address.
+- The first recipient address must be the webhook's report address.
 - Blocklist rules can reject reports by sender address.
 - The first attachment carries the report XML in `content`, gzip-compressed and
   base64-encoded, at most 8 MB once unpacked. One that cannot be unpacked gets
@@ -336,9 +344,9 @@ docker compose exec php bash -lc "bin/console app:dmarc:domain:process-new"
 docker compose exec php bash -lc "bin/console app:dmarc:report:delete-expired"
 docker compose exec php bash -lc "bin/console app:weekly-overview:send"
 docker compose exec php bash -lc "bin/console app:utils:ip-lookup 8.8.8.8"
-docker compose exec php bash -lc "bin/console app:mailbox:list"
-docker compose exec php bash -lc "bin/console app:mailbox:test <name>"
-docker compose exec php bash -lc "bin/console app:mailbox:poll <name>"
+docker compose exec php bash -lc "bin/console app:intake:mailbox:list"
+docker compose exec php bash -lc "bin/console app:intake:mailbox:test <name>"
+docker compose exec php bash -lc "bin/console app:intake:mailbox:poll <name>"
 docker compose exec php bash -lc "bin/console app:intake:api-key:create <name>"
 docker compose exec php bash -lc "bin/console app:platform:import-env"
 ```

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller\Email;
+namespace App\Controller\Intake;
 
 use App\DTO\Input\Email\Email;
 use App\Message\Email\InboundEmail;
@@ -23,7 +23,7 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
-final class InboundReportEmailWebhookController extends AbstractController
+final class WebhookController extends AbstractController
 {
     public function __construct(
         private readonly InboundReportEmailWebhookSignatureVerifier $signatureVerifier,
@@ -46,14 +46,16 @@ final class InboundReportEmailWebhookController extends AbstractController
     )]
     #[OA\Response(
         response: 503,
-        description: 'API intake is off, or no gateway secret is set. The sender is expected to keep the message and try again.',
+        description: 'The API or the webhook is off, or no webhook secret is set. The sender is expected to keep the message and try again.',
     )]
     #[OA\Response(
         response: 422,
         description: 'The attached report cannot be unpacked. The sender is expected to keep the message.',
     )]
-    #[OA\Tag(name: 'Email')]
-    #[Route('/v1/webhook/inbound_report_email', name: 'app_webhook_inbound_report_email', methods: [Request::METHOD_POST])]
+    #[OA\Tag(name: 'Intake')]
+    #[Route('/v1/intake/webhook', name: 'app_intake_webhook', methods: [Request::METHOD_POST])]
+    // Where gateways set up before 0.5 post. Kept so they need no change.
+    #[Route('/v1/webhook/inbound_report_email', name: 'app_intake_webhook_legacy', methods: [Request::METHOD_POST])]
     public function consume(
         Request $request,
         #[MapRequestPayload]
@@ -63,9 +65,12 @@ final class InboundReportEmailWebhookController extends AbstractController
         // taken. Not with a 404, which tells the gateway to discard the message:
         // switching intake off for a while must not cost the reports sent
         // meanwhile.
-        $secret = $this->settings->isApiIntakeEnabled() ? $this->settings->gatewaySecret() : null;
+        if (!$this->settings->isWebhookEnabled()) {
+            throw new ServiceUnavailableHttpException(message: 'The webhook is off.');
+        }
+        $secret = $this->settings->webhookSecret();
         if (null === $secret || '' === $secret) {
-            throw new ServiceUnavailableHttpException(message: 'Report intake through the API is off.');
+            throw new ServiceUnavailableHttpException(message: 'The webhook has no secret yet.');
         }
 
         if (!$this->signatureVerifier->verify(

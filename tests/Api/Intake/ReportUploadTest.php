@@ -36,7 +36,7 @@ final class ReportUploadTest extends ApiIntegrationTestCase
 
         $this->removeReportData();
         $settings = self::getContainer()->get(PlatformSettingsRepository::class)->get();
-        $settings->setApiIntakeEnabled(true);
+        $settings->setApiIntakeEnabled(true)->setUploadEndpointEnabled(true);
         $this->entityManager->flush();
     }
 
@@ -52,7 +52,7 @@ final class ReportUploadTest extends ApiIntegrationTestCase
         self::assertSame(202, $this->upload($this->zip($this->report('zip')), $token)->getStatusCode());
 
         $this->entityManager->clear();
-        $emails = $this->entityManager->getRepository(Email::class)->findBy(['source' => ReportSource::API]);
+        $emails = $this->entityManager->getRepository(Email::class)->findBy(['source' => ReportSource::UPLOAD]);
         self::assertCount(3, $emails);
         self::assertNotNull($emails[0]->getApiKey());
     }
@@ -97,6 +97,16 @@ final class ReportUploadTest extends ApiIntegrationTestCase
         $this->entityManager->flush();
 
         self::assertSame(404, $this->upload($this->report('off'), $token)->getStatusCode());
+    }
+
+    public function testIsGoneWhileTheUploadEndpointIsOff(): void
+    {
+        $token = $this->token();
+        $settings = self::getContainer()->get(PlatformSettingsRepository::class)->get();
+        $settings->setUploadEndpointEnabled(false);
+        $this->entityManager->flush();
+
+        self::assertSame(404, $this->upload($this->report('endpoint-off'), $token)->getStatusCode());
     }
 
     /**

@@ -214,11 +214,10 @@ final readonly class MailboxPoller
         }
 
         $outcome = $this->ingestor->ingest(new IncomingReport(
-            source: ReportSource::IMAP,
+            source: ReportSource::MAILBOX,
             messageId: $message->messageId() ?? sprintf('<imap-%s-%d-%d@dmarco>', $mailbox->getId()->toRfc4122(), $uidValidity, $uid),
             fromAddress: $message->from()?->email() ?? 'unknown',
             toAddress: $mailbox->getReportAddress() ?? ($message->to()[0] ?? null)?->email() ?? $mailbox->getUsername(),
-            receivedAt: \DateTimeImmutable::createFromInterface($message->date() ?? self::now())->setTimezone(new \DateTimeZone('UTC')),
             filename: $attachment->filename() ?? 'report.xml',
             xml: $xml,
             mailbox: $mailbox,

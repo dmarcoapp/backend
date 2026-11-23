@@ -48,7 +48,7 @@ final class ProcessDomainHandlerTest extends ApiIntegrationTestCase
     {
         // The record names the report address of the settings.
         $settings = self::getContainer()->get(PlatformSettingsRepository::class)->get();
-        $settings->setReportAddressDomain('reports.example.test')->setApiIntakeEnabled(true);
+        $settings->setReportAddressDomain('reports.example.test')->setApiIntakeEnabled(true)->setWebhookEnabled(true);
         $this->entityManager->flush();
         $token = $settings->getReportAddressToken();
 

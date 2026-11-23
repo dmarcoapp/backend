@@ -60,6 +60,6 @@ final class PlatformSettingsTestFactory
      */
     public static function gatewaySettings(string $token, string $domain): PlatformSettings
     {
-        return new PlatformSettings($token)->setReportAddressDomain($domain)->setApiIntakeEnabled(true);
+        return new PlatformSettings($token)->setReportAddressDomain($domain)->setApiIntakeEnabled(true)->setWebhookEnabled(true);
     }
 }

@@ -9,12 +9,12 @@ namespace App\Enum\Email;
  */
 enum ReportSource: string
 {
-    // Through the signed webhook of a mail gateway, such as DMARCo's own.
-    case GATEWAY = 'gateway';
-
-    // Uploaded with an API key.
-    case API = 'api';
-
     // Fetched from a mailbox over IMAP.
-    case IMAP = 'imap';
+    case MAILBOX = 'mailbox';
+
+    // Uploaded to the upload endpoint with an API key.
+    case UPLOAD = 'upload';
+
+    // Posted to the webhook by a mail gateway, such as dmarcoapp/mail-inbound.
+    case WEBHOOK = 'webhook';
 }

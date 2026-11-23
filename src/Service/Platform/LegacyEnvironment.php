@@ -17,14 +17,14 @@ final readonly class LegacyEnvironment
     public const string REPORT_RETENTION_DAYS = 'APP_REPORT_RETENTION_DAYS';
     public const string IP_LOOKUP_ENABLED = 'APP_IP_LOOKUP_ENABLED';
     public const string REPORT_DOMAIN = 'APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN';
-    public const string GATEWAY_SECRET = 'APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET';
+    public const string WEBHOOK_SECRET = 'APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET';
 
     // In the order of their names, which is the order every list of them
     // comes in.
     public const array SETTINGS = [
         self::REPORT_DOMAIN,
         self::SENDER_ADDRESS,
-        self::GATEWAY_SECRET,
+        self::WEBHOOK_SECRET,
         self::IP_LOOKUP_ENABLED,
         self::REPORT_RETENTION_DAYS,
         self::MAILER_DSN,

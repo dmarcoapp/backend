@@ -57,7 +57,7 @@ final class MailboxApiTest extends ApiIntegrationTestCase
 
     public function testAddsAMailboxAndNeverShowsItsPassword(): void
     {
-        $created = $this->call('POST', '/v1/platform/mailboxes', self::VALID);
+        $created = $this->call('POST', '/v1/platform/intake/mailboxes', self::VALID);
 
         self::assertSame(201, $created['status'], json_encode($created['body'], JSON_THROW_ON_ERROR));
         self::assertStringNotContainsString('horse', json_encode($created['body'], JSON_THROW_ON_ERROR));
@@ -74,7 +74,7 @@ final class MailboxApiTest extends ApiIntegrationTestCase
         self::assertStringNotContainsString('horse', $mailbox->getEncryptedCredentials());
         self::assertSame('correct horse battery staple', self::getContainer()->get(MailboxCredentials::class)->password($mailbox));
 
-        self::assertCount(1, $this->call('GET', '/v1/platform/mailboxes')['body']);
+        self::assertCount(1, $this->call('GET', '/v1/platform/intake/mailboxes')['body']);
     }
 
     /**
@@ -102,7 +102,7 @@ final class MailboxApiTest extends ApiIntegrationTestCase
     #[DataProvider('invalidMailboxProvider')]
     public function testRefusesAnInvalidMailbox(array $change): void
     {
-        $response = $this->call('POST', '/v1/platform/mailboxes', array_filter([...self::VALID, ...$change], static fn (mixed $value): bool => null !== $value));
+        $response = $this->call('POST', '/v1/platform/intake/mailboxes', array_filter([...self::VALID, ...$change], static fn (mixed $value): bool => null !== $value));
 
         self::assertSame(422, $response['status'], json_encode($response['body'], JSON_THROW_ON_ERROR));
         self::assertCount(0, self::getContainer()->get(MailboxRepository::class)->findAll());
@@ -110,13 +110,13 @@ final class MailboxApiTest extends ApiIntegrationTestCase
 
     public function testChangesAMailboxAndStartsOverOnAnotherServer(): void
     {
-        $id = $this->call('POST', '/v1/platform/mailboxes', self::VALID)['body']['id'];
+        $id = $this->call('POST', '/v1/platform/intake/mailboxes', self::VALID)['body']['id'];
         $mailbox = self::getContainer()->get(MailboxRepository::class)->find($id);
         self::assertInstanceOf(Mailbox::class, $mailbox);
         $mailbox->setCursor(12345, 678);
         $this->entityManager->flush();
 
-        $changed = $this->call('PATCH', '/v1/platform/mailboxes/'.$id, ['security' => 'starttls', 'afterImport' => 'move', 'moveToFolder' => 'DMARC/Done']);
+        $changed = $this->call('PATCH', '/v1/platform/intake/mailboxes/'.$id, ['security' => 'starttls', 'afterImport' => 'move', 'moveToFolder' => 'DMARC/Done']);
         self::assertSame(200, $changed['status']);
         self::assertSame(143, $changed['body']['port']);
         self::assertSame('DMARC/Done', $changed['body']['moveToFolder']);
@@ -124,16 +124,16 @@ final class MailboxApiTest extends ApiIntegrationTestCase
         $this->entityManager->clear();
         self::assertSame(678, self::getContainer()->get(MailboxRepository::class)->find($id)?->getLastUid());
 
-        $this->call('PATCH', '/v1/platform/mailboxes/'.$id, ['host' => 'imap.other.example']);
+        $this->call('PATCH', '/v1/platform/intake/mailboxes/'.$id, ['host' => 'imap.other.example']);
         $this->entityManager->clear();
         self::assertNull(self::getContainer()->get(MailboxRepository::class)->find($id)?->getLastUid());
     }
 
     public function testATestThatCannotConnectSaysWhy(): void
     {
-        $id = $this->call('POST', '/v1/platform/mailboxes', [...self::VALID, 'host' => '127.0.0.1', 'port' => 9])['body']['id'];
+        $id = $this->call('POST', '/v1/platform/intake/mailboxes', [...self::VALID, 'host' => '127.0.0.1', 'port' => 9])['body']['id'];
 
-        $result = $this->call('POST', '/v1/platform/mailboxes/'.$id.'/test');
+        $result = $this->call('POST', '/v1/platform/intake/mailboxes/'.$id.'/test');
 
         self::assertSame(200, $result['status']);
         self::assertFalse($result['body']['ok']);
@@ -143,14 +143,14 @@ final class MailboxApiTest extends ApiIntegrationTestCase
 
     public function testQueuesAReadAndRemovesAMailbox(): void
     {
-        $id = $this->call('POST', '/v1/platform/mailboxes', self::VALID)['body']['id'];
+        $id = $this->call('POST', '/v1/platform/intake/mailboxes', self::VALID)['body']['id'];
 
-        self::assertSame(202, $this->call('POST', '/v1/platform/mailboxes/'.$id.'/poll')['status']);
+        self::assertSame(202, $this->call('POST', '/v1/platform/intake/mailboxes/'.$id.'/poll')['status']);
         self::assertEquals([new PollMailbox($id)], $this->dispatched);
 
-        self::assertSame([], $this->call('GET', '/v1/platform/mailboxes/'.$id.'/log')['body']);
-        self::assertSame(204, $this->call('DELETE', '/v1/platform/mailboxes/'.$id)['status']);
-        self::assertSame([], $this->call('GET', '/v1/platform/mailboxes')['body']);
+        self::assertSame([], $this->call('GET', '/v1/platform/intake/mailboxes/'.$id.'/log')['body']);
+        self::assertSame(204, $this->call('DELETE', '/v1/platform/intake/mailboxes/'.$id)['status']);
+        self::assertSame([], $this->call('GET', '/v1/platform/intake/mailboxes')['body']);
     }
 
     /**

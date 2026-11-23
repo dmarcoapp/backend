@@ -37,9 +37,16 @@ final class WebhookEndpointTest extends ApiTestCase
         self::assertSame(503, $this->postSignedWithKnownRecipient($this->validWebhookPayload())->getStatusCode());
     }
 
-    public function testWebhookAsksTheGatewayToWaitWithoutAGatewaySecret(): void
+    public function testWebhookAsksTheGatewayToWaitWhileTheWebhookIsOff(): void
     {
-        $this->settings = self::settings()->setEncryptedGatewaySecret(null);
+        $this->settings = self::settings()->setWebhookEnabled(false);
+
+        self::assertSame(503, $this->postSignedWithKnownRecipient($this->validWebhookPayload())->getStatusCode());
+    }
+
+    public function testWebhookAsksTheGatewayToWaitWithoutASecret(): void
+    {
+        $this->settings = self::settings()->setEncryptedWebhookSecret(null);
 
         self::assertSame(503, $this->postSignedWithKnownRecipient($this->validWebhookPayload())->getStatusCode());
     }
@@ -48,7 +55,7 @@ final class WebhookEndpointTest extends ApiTestCase
     {
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $this->validWebhookPayload(),
         );
 
@@ -61,7 +68,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $this->validWebhookPayload(),
             headers: [
                 'x-timestamp' => $timestamp,
@@ -84,7 +91,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $payload,
             headers: [
                 'x-timestamp' => $timestamp,
@@ -96,6 +103,39 @@ final class WebhookEndpointTest extends ApiTestCase
     }
 
     public function testWebhookAcceptsValidSignature(): void
+    {
+        $payload = $this->validWebhookPayload();
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $timestamp = (string) time();
+        $secret = self::SECRET;
+        $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+        $messageBus = $this->createMock(MessageBusInterface::class);
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(InboundEmail::class))
+            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
+        ;
+
+        $response = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/intake/webhook',
+            payload: $payload,
+            headers: [
+                'x-timestamp' => $timestamp,
+                'x-signature' => 'sha256='.$signature,
+            ],
+            configureContainer: function (ContainerInterface $container) use ($messageBus): void {
+                $container->set(MessageBusInterface::class, $messageBus);
+                $container->set(AggregateReportPostboxResolver::class, $this->resolverFor('inbound'));
+            },
+        );
+
+        self::assertSame(200, $response->getStatusCode());
+    }
+
+    public function testWebhookStillAnswersAtItsPathBefore05(): void
     {
         $payload = $this->validWebhookPayload();
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
@@ -139,7 +179,7 @@ final class WebhookEndpointTest extends ApiTestCase
         // Correctly signed, so only the age of the timestamp can reject it.
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $payload,
             headers: [
                 'x-timestamp' => $timestamp,
@@ -164,7 +204,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
         $response = $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $payload,
             headers: [
                 'x-timestamp' => $timestamp,
@@ -211,7 +251,7 @@ final class WebhookEndpointTest extends ApiTestCase
 
         return $this->requestJson(
             method: 'POST',
-            uri: '/v1/webhook/inbound_report_email',
+            uri: '/v1/intake/webhook',
             payload: $payload,
             headers: [
                 'x-timestamp' => $timestamp,
@@ -251,7 +291,8 @@ final class WebhookEndpointTest extends ApiTestCase
     {
         return new PlatformSettings('inbound')
             ->setApiIntakeEnabled(true)
-            ->setEncryptedGatewaySecret(new SecretBox(PlatformSettingsTestFactory::KEY)->encrypt(self::SECRET, PlatformSettings::GATEWAY_SECRET_CONTEXT))
+            ->setWebhookEnabled(true)
+            ->setEncryptedWebhookSecret(new SecretBox(PlatformSettingsTestFactory::KEY)->encrypt(self::SECRET, PlatformSettings::WEBHOOK_SECRET_CONTEXT))
         ;
     }
 

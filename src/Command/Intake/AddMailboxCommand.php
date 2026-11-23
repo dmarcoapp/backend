@@ -23,7 +23,7 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
  * environment variable DMARCO_MAILBOX_PASSWORD, or from a hidden prompt.
  */
 #[AsCommand(
-    name: 'app:mailbox:add',
+    name: 'app:intake:mailbox:add',
     description: 'Add a mailbox to fetch DMARC reports from over IMAP',
 )]
 final class AddMailboxCommand extends Command

@@ -34,7 +34,7 @@ use Symfony\Component\String\ByteString;
 #[IsGranted(User::ROLE)]
 final class IntakeSettingsController extends AbstractController
 {
-    private const int GATEWAY_SECRET_LENGTH = 48;
+    private const int WEBHOOK_SECRET_LENGTH = 48;
 
     public function __construct(
         private readonly PlatformSettingsProvider $settings,
@@ -87,14 +87,14 @@ final class IntakeSettingsController extends AbstractController
     #[OA\Post(summary: 'Makes a new secret for the mail gateway to sign its webhooks with. The answer holds it, shown this once. The old one stops working.', security: [['Bearer' => []]])]
     #[OA\Response(response: 201, description: 'The secret.')]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/intake/gateway-secret', name: 'app_intake_gateway_secret_create', methods: [Request::METHOD_POST])]
-    public function createGatewaySecret(): JsonResponse
+    #[Route('/v1/platform/intake/webhook-secret', name: 'app_intake_webhook_secret_create', methods: [Request::METHOD_POST])]
+    public function createWebhookSecret(): JsonResponse
     {
         $this->assertPlatformMode();
 
-        $secret = ByteString::fromRandom(self::GATEWAY_SECRET_LENGTH)->toString();
+        $secret = ByteString::fromRandom(self::WEBHOOK_SECRET_LENGTH)->toString();
         $settings = $this->settings->settings();
-        $settings->setEncryptedGatewaySecret($this->settings->encryptGatewaySecret($secret));
+        $settings->setEncryptedWebhookSecret($this->settings->encryptWebhookSecret($secret));
         $this->settingsRepository->save($settings);
 
         return new JsonResponse(['secret' => $secret], Response::HTTP_CREATED);
@@ -103,13 +103,13 @@ final class IntakeSettingsController extends AbstractController
     #[OA\Delete(summary: 'Removes the gateway secret, which turns the gateway webhook off.', security: [['Bearer' => []]])]
     #[OA\Response(response: 204, description: 'Removed.')]
     #[OA\Tag(name: 'Intake')]
-    #[Route('/v1/platform/intake/gateway-secret', name: 'app_intake_gateway_secret_delete', methods: [Request::METHOD_DELETE])]
-    public function deleteGatewaySecret(): Response
+    #[Route('/v1/platform/intake/webhook-secret', name: 'app_intake_webhook_secret_delete', methods: [Request::METHOD_DELETE])]
+    public function deleteWebhookSecret(): Response
     {
         $this->assertPlatformMode();
 
         $settings = $this->settings->settings();
-        $settings->setEncryptedGatewaySecret(null);
+        $settings->setEncryptedWebhookSecret(null);
         $this->settingsRepository->save($settings);
 
         return new Response(status: Response::HTTP_NO_CONTENT);

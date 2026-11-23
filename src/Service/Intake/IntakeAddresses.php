@@ -9,14 +9,14 @@ use App\Service\Email\AggregateReportPostboxAddressProvider;
 use App\Service\Platform\PlatformSettingsProvider;
 
 /**
- * The addresses a DMARC record can send reports to: the mail gateway's, while
+ * The addresses a DMARC record can send reports to: the webhook's, while
  * the API takes reports, and the report address of each enabled mailbox.
  */
 final readonly class IntakeAddresses
 {
     public function __construct(
         private PlatformSettingsProvider $settings,
-        private AggregateReportPostboxAddressProvider $gatewayAddress,
+        private AggregateReportPostboxAddressProvider $webhookAddress,
         private MailboxRepository $mailboxes,
     ) {}
 
@@ -27,9 +27,9 @@ final readonly class IntakeAddresses
     {
         $addresses = [];
 
-        $gateway = $this->gatewayAddress->getAddress();
-        if (null !== $gateway && $this->settings->isApiIntakeEnabled()) {
-            $addresses[] = new IntakeAddress($gateway, IntakeAddress::GATEWAY, 'Mail gateway');
+        $webhook = $this->webhookAddress->getAddress();
+        if (null !== $webhook && $this->settings->isWebhookEnabled()) {
+            $addresses[] = new IntakeAddress($webhook, IntakeAddress::WEBHOOK, 'Webhook');
         }
 
         foreach ($this->mailboxes->findEnabled() as $mailbox) {

@@ -14,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
-    name: 'app:mailbox:test',
+    name: 'app:intake:mailbox:test',
     description: 'Sign in to a mailbox and look at its folders, without reading any message',
 )]
 final class TestMailboxCommand extends Command
@@ -40,7 +40,7 @@ final class TestMailboxCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $mailbox = $this->findMailbox($this->mailboxes, (string) $input->getArgument('mailbox'));
         if (null === $mailbox) {
-            $io->error('There is no such mailbox. See app:mailbox:list.');
+            $io->error('There is no such mailbox. See app:intake:mailbox:list.');
 
             return Command::FAILURE;
         }

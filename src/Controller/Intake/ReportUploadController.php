@@ -45,7 +45,7 @@ final class ReportUploadController extends AbstractController
     #[OA\Response(response: 202, description: 'Taken, to be processed.')]
     #[OA\Response(response: 200, description: 'Already received, or from a blocked sender. Nothing more happens.')]
     #[OA\Response(response: 401, description: 'No valid API key.')]
-    #[OA\Response(response: 404, description: 'Report intake through the API is off.')]
+    #[OA\Response(response: 404, description: 'The API or its upload endpoint is off.')]
     #[OA\Response(response: 413, description: 'The file is larger than 10 MB.')]
     #[OA\Response(response: 422, description: 'The file is not a report DMARCo accepts. The body says why.')]
     #[OA\Response(response: 429, description: 'Too many requests from this address.')]
@@ -53,8 +53,8 @@ final class ReportUploadController extends AbstractController
     #[Route('/v1/intake/reports', name: 'app_intake_report_upload', methods: [Request::METHOD_POST])]
     public function upload(Request $request): JsonResponse
     {
-        if ($this->settings->isLegacyMode() || !$this->settings->isApiIntakeEnabled()) {
-            throw new NotFoundHttpException('Report intake through the API is off.');
+        if (!$this->settings->isUploadEndpointEnabled()) {
+            throw new NotFoundHttpException('The upload endpoint is off.');
         }
 
         // Counted before the key is checked, so guessing keys is throttled too.
@@ -89,12 +89,11 @@ final class ReportUploadController extends AbstractController
         }
 
         $outcome = $this->ingestor->ingest(new IncomingReport(
-            source: ReportSource::API,
+            source: ReportSource::UPLOAD,
             // The same file uploaded twice is recognized by its content.
             messageId: sprintf('<%s@api.dmarco>', hash('sha256', $xml)),
             fromAddress: self::emailHeader($request, 'X-Report-From') ?? 'api-key:'.$key->getName(),
             toAddress: self::emailHeader($request, 'X-Report-Recipient') ?? 'api',
-            receivedAt: new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
             filename: (string) $request->headers->get('X-Report-Filename', 'report.xml'),
             xml: $xml,
             apiKey: $key,

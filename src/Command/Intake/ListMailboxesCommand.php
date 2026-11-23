@@ -12,7 +12,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
-    name: 'app:mailbox:list',
+    name: 'app:intake:mailbox:list',
     description: 'List the mailboxes DMARC reports are fetched from',
 )]
 final class ListMailboxesCommand extends Command
@@ -41,7 +41,7 @@ final class ListMailboxesCommand extends Command
 
         $io = new SymfonyStyle($input, $output);
         if ([] === $rows) {
-            $io->writeln('No mailboxes yet. Add one with app:mailbox:add, or on the Platform page.');
+            $io->writeln('No mailboxes yet. Add one with app:intake:mailbox:add, or on the Platform page.');
 
             return Command::SUCCESS;
         }

@@ -152,8 +152,29 @@ final readonly class PlatformSettingsProvider
     public function isApiIntakeEnabled(): bool
     {
         return $this->isLegacyMode()
-            ? null !== $this->legacyEnvironment->get(LegacyEnvironment::GATEWAY_SECRET)
+            ? null !== $this->legacyEnvironment->get(LegacyEnvironment::WEBHOOK_SECRET)
             : true === $this->settings()->isApiIntakeEnabled();
+    }
+
+    /**
+     * Uploads with an API key. There are no keys before the upgrade.
+     */
+    public function isUploadEndpointEnabled(): bool
+    {
+        return !$this->isLegacyMode()
+            && $this->isApiIntakeEnabled()
+            && true === $this->settings()->isUploadEndpointEnabled();
+    }
+
+    /**
+     * The mail gateway's webhook, which before the upgrade was on whenever the
+     * gateway had a secret.
+     */
+    public function isWebhookEnabled(): bool
+    {
+        return $this->isLegacyMode()
+            ? $this->isApiIntakeEnabled()
+            : $this->isApiIntakeEnabled() && true === $this->settings()->isWebhookEnabled();
     }
 
     /**
@@ -161,20 +182,20 @@ final readonly class PlatformSettingsProvider
      *
      * @throws UnreadableSecretException
      */
-    public function gatewaySecret(): ?string
+    public function webhookSecret(): ?string
     {
         if ($this->isLegacyMode()) {
-            return $this->legacyEnvironment->get(LegacyEnvironment::GATEWAY_SECRET);
+            return $this->legacyEnvironment->get(LegacyEnvironment::WEBHOOK_SECRET);
         }
 
-        $encrypted = $this->settings()->getEncryptedGatewaySecret();
+        $encrypted = $this->settings()->getEncryptedWebhookSecret();
 
-        return null === $encrypted ? null : $this->secretBox->decrypt($encrypted, PlatformSettings::GATEWAY_SECRET_CONTEXT);
+        return null === $encrypted ? null : $this->secretBox->decrypt($encrypted, PlatformSettings::WEBHOOK_SECRET_CONTEXT);
     }
 
-    public function encryptGatewaySecret(#[\SensitiveParameter] string $secret): string
+    public function encryptWebhookSecret(#[\SensitiveParameter] string $secret): string
     {
-        return $this->secretBox->encrypt($secret, PlatformSettings::GATEWAY_SECRET_CONTEXT);
+        return $this->secretBox->encrypt($secret, PlatformSettings::WEBHOOK_SECRET_CONTEXT);
     }
 
     public function encryptSmtpPassword(#[\SensitiveParameter] string $password): string

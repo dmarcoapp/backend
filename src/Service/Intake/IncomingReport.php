@@ -18,7 +18,6 @@ final readonly class IncomingReport
         public string $messageId,
         public string $fromAddress,
         public string $toAddress,
-        public \DateTimeImmutable $receivedAt,
         public string $filename,
         public string $xml,
         public ?Mailbox $mailbox = null,

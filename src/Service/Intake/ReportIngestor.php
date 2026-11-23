@@ -53,7 +53,10 @@ final readonly class ReportIngestor
         }
 
         $email = new Email()
-            ->setCreatedAt($report->receivedAt)
+            // When DMARCo stored it, not when it was sent: the cleanup of emails
+            // that never became a report counts from here, and a mailbox read
+            // or a replay can bring in mail that is weeks old.
+            ->setCreatedAt(new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
             ->setFromAddress($fromAddress)
             ->setToAddress($toAddress)
             ->setMessageId($messageId)
