@@ -1,15 +1,17 @@
 ---
 # Production environment override
 x-app-environment: &app_environment
-    APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN: ${APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN:?Set APP_DMARC_AGGREGATE_REPORT_EMAIL_RECEIVER_DOMAIN}
-    APP_EMAIL_SENDER_ADDRESS: ${APP_EMAIL_SENDER_ADDRESS:?Set APP_EMAIL_SENDER_ADDRESS}
+    # Encrypts the passwords and secrets kept in the database. The settings
+    # that were variables before 0.5, such as outgoing mail and the report
+    # domain, are set on the dashboard's Platform page instead, so none of
+    # them is passed in: compose would pass the placeholders in .env as if an
+    # operator had set them, and the backend would take them over.
+    APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
     APP_FRONTEND_URL: ${APP_FRONTEND_URL:?Set APP_FRONTEND_URL}
-    APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET: ${APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET:?Set APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET}
     APP_SECRET: ${APP_SECRET:?Set APP_SECRET}
     CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN:?Set CORS_ALLOW_ORIGIN}
     DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-app}?serverVersion=${POSTGRES_VERSION:-16}&charset=${POSTGRES_CHARSET:-utf8}
     LOCK_DSN: ${LOCK_DSN:-redis://valkey:6379/0}
-    MAILER_DSN: ${MAILER_DSN:-null://null}
     MESSENGER_ASYNC_HIGH_TRANSPORT_DSN: redis://valkey:6379/messages_high/dmarco/worker?dbindex=1
     MESSENGER_ASYNC_LOW_TRANSPORT_DSN: redis://valkey:6379/messages_low/dmarco/worker?dbindex=1
     REDIS_DSN: ${REDIS_DSN:-redis://valkey:6379/0}

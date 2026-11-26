@@ -17,9 +17,8 @@
 
 > [!IMPORTANT]
 > **Start at [dmarcoapp/dmarcoapp](https://github.com/dmarcoapp/dmarcoapp).**
-> That repository installs all of DMARCo with one command: this backend, the
-> dashboard, and the mail gateway if you want it. It is also the issue tracker
-> for the whole project, so
+> That repository installs all of DMARCo with one command: this backend and the
+> dashboard. It is also the issue tracker for the whole project, so
 > [report anything that goes wrong there](https://github.com/dmarcoapp/dmarcoapp/issues/new/choose),
 > including problems in this component. What follows is one component's source,
 > for people working on it.
@@ -29,10 +28,11 @@ Symfony API, the workers behind it, the database model, the schedulers, and the
 report processing pipeline.
 
 Reports reach it three ways. The worker reads them from mailboxes over IMAP,
-uploads arrive through the API with a key, and a mail gateway such as
-[`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound), which is
-being retired, posts them as a signed webhook. See
-[Report intake](#report-intake).
+uploads arrive through the API with a key, and a mail gateway can post them as
+a signed webhook. DMARCo's own gateway,
+[`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound), is
+retired, and the webhook stays for the installs that still run it and for
+gateways of your own. See [Report intake](#report-intake).
 
 ## Overview
 
@@ -256,8 +256,9 @@ Message handling:
 - The XML is validated against the DMARC aggregate report schema before it is
   stored and processed.
 
-If you use `dmarcoapp/mail-inbound`, configure its `WEBHOOK_URL` to point to
-this endpoint and use the same secret on both sides. Until `APP_ENCRYPTION_KEY`
+`dmarcoapp/mail-inbound`, retired with `0.4` as its last release, posts here
+once its `WEBHOOK_URL` points to this endpoint and both sides have the same
+secret. Until `APP_ENCRYPTION_KEY`
 is set, the secret is `APP_INBOUND_REPORT_EMAIL_WEBHOOK_SECRET`.
 
 ## Production
@@ -389,7 +390,7 @@ docker compose exec php bash -lc "bin/console make:migration"
 - [`dmarcoapp/dashboard`](https://github.com/dmarcoapp/dashboard): web UI for
   reviewing DMARC aggregate reports
 - [`dmarcoapp/mail-inbound`](https://github.com/dmarcoapp/mail-inbound): the
-  mail gateway that receives report email on port 25, being retired in favor of
+  mail gateway that received report email on port 25, retired in favor of
   mailboxes read over IMAP
 
 ## License
