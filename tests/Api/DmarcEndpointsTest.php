@@ -20,7 +20,10 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
         $this->createAccount('owner@example.com', 'Str0ngPassw0rd!@#');
 
         $domain = new Domain('example.com');
-        $domain->setLastChecked(new \DateTimeImmutable());
+        $domain
+            ->setLastChecked(new \DateTimeImmutable())
+            ->setLastReportAt(new \DateTimeImmutable('2024-05-06 07:08:09'))
+        ;
         $this->entityManager->persist($domain);
 
         $email = new Email();
@@ -74,6 +77,8 @@ final class DmarcEndpointsTest extends ApiIntegrationTestCase
         );
 
         self::assertSame(200, $domainGetResponse->getStatusCode());
+        $domainPayload = json_decode((string) $domainGetResponse->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertStringStartsWith('2024-05-06 07:08:09', $domainPayload['lastReportAt']['date'] ?? '');
 
         $reportsResponse = $this->requestJson(
             method: 'GET',

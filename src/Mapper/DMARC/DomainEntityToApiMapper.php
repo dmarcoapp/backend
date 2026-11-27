@@ -37,6 +37,7 @@ final readonly class DomainEntityToApiMapper implements MapperInterface
 
         $dto->domain = $entity->getDomain();
         $dto->lastChecked = $entity->getLastChecked();
+        $dto->lastReportAt = $entity->getLastReportAt();
         $dto->dmarcRecord = $entity->getDmarcRecord();
         $dto->isConfiguredCorrectly = $entity->isConfiguredCorrectly();
         $dto->protectionLevel = $entity->getProtectionLevel();

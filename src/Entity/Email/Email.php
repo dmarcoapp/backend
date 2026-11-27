@@ -52,8 +52,8 @@ class Email
     private ?Report $report = null;
 
     /**
-     * Null only on emails stored before the source was recorded, which all
-     * came through the mail gateway.
+     * Emails stored before the source was recorded came through the mail
+     * gateway, so a migration set them to webhook.
      */
     #[ORM\Column(length: 16, nullable: true, enumType: ReportSource::class)]
     private ?ReportSource $source = null;

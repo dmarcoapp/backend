@@ -42,6 +42,12 @@ class Domain implements EntityInterface, FilterableInterface, SortableInterface
     #[ORM\Column(nullable: true)]
     private ?bool $isConfiguredCorrectly = null;
 
+    /**
+     * When the newest report for this domain reached DMARCo.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $lastReportAt = null;
+
     // TODO: $dmarcRecordTTL
 
     public function __construct(string $domain)
@@ -59,7 +65,7 @@ class Domain implements EntityInterface, FilterableInterface, SortableInterface
     #[\Override]
     public static function getAvailableSortFields(): array
     {
-        return ['domain', 'lastChecked', 'protectionLevel', 'createdAt'];
+        return ['domain', 'lastChecked', 'lastReportAt', 'protectionLevel', 'createdAt'];
     }
 
     #[\Override]
@@ -129,6 +135,31 @@ class Domain implements EntityInterface, FilterableInterface, SortableInterface
     public function setIsConfiguredCorrectly(?bool $isConfiguredCorrectly): static
     {
         $this->isConfiguredCorrectly = $isConfiguredCorrectly;
+
+        return $this;
+    }
+
+    public function getLastReportAt(): ?\DateTimeImmutable
+    {
+        return $this->lastReportAt;
+    }
+
+    public function setLastReportAt(?\DateTimeImmutable $lastReportAt): static
+    {
+        $this->lastReportAt = $lastReportAt;
+
+        return $this;
+    }
+
+    /**
+     * Moves the last report time forward only, so a report that reaches
+     * DMARCo late, or is processed again, never turns it back.
+     */
+    public function recordReportReceived(\DateTimeImmutable $receivedAt): static
+    {
+        if (null === $this->lastReportAt || $receivedAt > $this->lastReportAt) {
+            $this->lastReportAt = $receivedAt;
+        }
 
         return $this;
     }

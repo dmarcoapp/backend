@@ -12,6 +12,7 @@ final class DomainApi
     public Uuid $id;
     public ?string $domain;
     public ?\DateTimeInterface $lastChecked;
+    public ?\DateTimeInterface $lastReportAt;
     public ?string $dmarcRecord;
     public ?bool $isConfiguredCorrectly;
     public ?ProtectionLevel $protectionLevel;

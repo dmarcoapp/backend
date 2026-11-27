@@ -6,12 +6,14 @@ namespace App\DTO\Output\DMARC;
 
 use App\Enum\DMARC\AlignmentType;
 use App\Enum\DMARC\DispositionType;
+use App\Enum\Email\ReportSource;
 use Symfony\Component\Uid\Uuid;
 
 final class ReportApi
 {
     public Uuid $id;
     public ?\DateTimeInterface $receivedAt;
+    public ?ReportSource $source;
     public ?string $fromAddress;
     public ?string $reportingOrganization;
     public ?string $reportingOrganizationEmail;

@@ -26,6 +26,7 @@ final class DomainEntityToApiMapperTest extends TestCase
 
         $lastChecked = new \DateTimeImmutable('2024-01-01 12:00:00');
         $createdAt = new \DateTimeImmutable('2024-01-02 09:30:00');
+        $lastReportAt = new \DateTimeImmutable('2024-01-03 06:15:00');
 
         $domain
             ->setLastChecked($lastChecked)
@@ -33,6 +34,7 @@ final class DomainEntityToApiMapperTest extends TestCase
             ->setProtectionLevel(ProtectionLevel::MODERATE)
             ->setCreatedAt($createdAt)
             ->setIsConfiguredCorrectly(true)
+            ->setLastReportAt($lastReportAt)
         ;
 
         $mapper = new DomainEntityToApiMapper();
@@ -42,6 +44,7 @@ final class DomainEntityToApiMapperTest extends TestCase
         self::assertSame($domainId, $dto->id);
         self::assertSame('example.com', $dto->domain);
         self::assertSame($lastChecked, $dto->lastChecked);
+        self::assertSame($lastReportAt, $dto->lastReportAt);
         self::assertSame('v=DMARC1; p=none', $dto->dmarcRecord);
         self::assertSame(ProtectionLevel::MODERATE, $dto->protectionLevel);
         self::assertSame($createdAt, $dto->createdAt);

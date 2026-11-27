@@ -134,9 +134,12 @@ final readonly class ProcessEmailHandler
                 return;
             }
 
-            if (null === $this->domainRepository->findOneBy(['domain' => $reportDomain])) {
-                $this->entityManager->persist(new Domain($reportDomain));
+            $domain = $this->domainRepository->findOneBy(['domain' => $reportDomain]);
+            if (null === $domain) {
+                $domain = new Domain($reportDomain);
+                $this->entityManager->persist($domain);
             }
+            $domain->recordReportReceived($email->getCreatedAt() ?? new \DateTimeImmutable());
 
             $report = $this->createReportForEmail($email, $xmlContent, $metadata, $reportDomain, $beginDate);
         } finally {

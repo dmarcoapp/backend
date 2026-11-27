@@ -87,6 +87,40 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
 
         $domain = $domainRepository->findOneBy(['domain' => 'example.com']);
         self::assertInstanceOf(Domain::class, $domain);
+        self::assertEquals(new \DateTimeImmutable('2024-01-01 10:00:00'), $domain->getLastReportAt());
+    }
+
+    public function testInvokeMovesTheLastReportTimeOfADomainForwardOnly(): void
+    {
+        $emailRepository = self::getContainer()->get(EmailRepository::class);
+        $domainRepository = self::getContainer()->get(DomainRepository::class);
+
+        $domain = new Domain('example.com');
+        $domain->setLastReportAt(new \DateTimeImmutable('2023-12-31 08:00:00'));
+        $domainRepository->save($domain);
+
+        $messageBus = $this->createStub(MessageBusInterface::class);
+        $messageBus
+            ->method('dispatch')
+            ->willReturnCallback(static fn (object $message): Envelope => new Envelope($message))
+        ;
+        $handler = $this->createHandler($emailRepository, $messageBus, $this->createStub(LoggerInterface::class));
+
+        $email = $this->createEmail('report.xml', $this->validXml());
+        $emailRepository->save($email);
+        $handler(new ProcessEmail($email->getId()->toRfc4122()));
+
+        $this->entityManager->refresh($domain);
+        self::assertEquals(new \DateTimeImmutable('2024-01-01 10:00:00'), $domain->getLastReportAt());
+
+        // A report that reached DMARCo earlier, processed only now, leaves the time alone.
+        $older = $this->createEmail('report.xml', $this->validXml('198.51.100.7', 'example.com', 'report-older'));
+        $older->setCreatedAt(new \DateTimeImmutable('2023-12-30 08:00:00'));
+        $emailRepository->save($older);
+        $handler(new ProcessEmail($older->getId()->toRfc4122()));
+
+        $this->entityManager->refresh($domain);
+        self::assertEquals(new \DateTimeImmutable('2024-01-01 10:00:00'), $domain->getLastReportAt());
     }
 
     public function testInvokeUpdatesExistingReportWhenPresent(): void
@@ -271,7 +305,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
         return (string) file_get_contents($path);
     }
 
-    private function validXml(string $sourceIp = '192.0.2.1', string $domain = 'example.com'): string
+    private function validXml(string $sourceIp = '192.0.2.1', string $domain = 'example.com', string $reportId = 'test-report'): string
     {
         return <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
@@ -279,7 +313,7 @@ final class ProcessEmailHandlerTest extends ApiIntegrationTestCase
   <report_metadata>
     <org_name>Example</org_name>
     <email>org@example.com</email>
-    <report_id>test-report</report_id>
+    <report_id>{$reportId}</report_id>
     <date_range>
       <begin>1700000000</begin>
       <end>1700086400</end>

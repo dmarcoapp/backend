@@ -7,6 +7,7 @@ namespace App\Tests\Api;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
 use App\Entity\User\User;
+use App\Enum\Email\ReportSource;
 
 /**
  * @internal
@@ -45,6 +46,39 @@ final class ReportControllerTest extends ApiIntegrationTestCase
         self::assertCount(2, $payload['items'] ?? []);
         self::assertSame(7, $payload['items'][0]['sumCount'] ?? null);
         self::assertSame(5, $payload['items'][1]['sumCount'] ?? null);
+    }
+
+    public function testListShowsAndFiltersByTheChannelAReportCameIn(): void
+    {
+        $this->createAccount('channels@example.com', 'Str0ngPassw0rd!@#');
+
+        $this->createReport('example.com', 1, true, source: ReportSource::MAILBOX);
+        $this->createReport('example.com', 2, true, source: ReportSource::UPLOAD);
+        $this->createReport('example.com', 3, true, source: ReportSource::WEBHOOK);
+
+        $token = $this->login('channels@example.com', 'Str0ngPassw0rd!@#');
+
+        $response = $this->requestJson(
+            method: 'GET',
+            uri: '/v1/dmarc/reports?sort[sumCount]=asc',
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(['mailbox', 'upload', 'webhook'], array_column($payload['items'], 'source'));
+        self::assertContains('email.source', $payload['meta']['filterableFields'] ?? []);
+
+        $response = $this->requestJson(
+            method: 'GET',
+            uri: '/v1/dmarc/reports?filter[eq:email.source]=upload',
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(1, $payload['meta']['totalCount'] ?? null);
+        self::assertSame(2, $payload['items'][0]['sumCount'] ?? null);
     }
 
     public function testGetReturnsAReport(): void
@@ -162,7 +196,7 @@ final class ReportControllerTest extends ApiIntegrationTestCase
         self::assertNotNull($this->entityManager->getRepository(Report::class)->find($report->getId()));
     }
 
-    private function createReport(string $domain, int $sumCount, bool $processed, string $rawXml = '<xml/>'): Report
+    private function createReport(string $domain, int $sumCount, bool $processed, string $rawXml = '<xml/>', ?ReportSource $source = null): Report
     {
         $email = new Email();
         $email
@@ -172,6 +206,7 @@ final class ReportControllerTest extends ApiIntegrationTestCase
             ->setMessageId('<message@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
+            ->setSource($source)
         ;
 
         $report = new Report();

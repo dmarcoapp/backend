@@ -120,6 +120,7 @@ class Report implements EntityInterface, FilterableInterface, SortableInterface
             'sumCount',
             'isVerified',
             'records.sourceIp',
+            'email.source',
         ];
     }
 

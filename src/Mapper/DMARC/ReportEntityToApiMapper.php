@@ -45,6 +45,7 @@ final readonly class ReportEntityToApiMapper implements MapperInterface
         $domainEntity = null === $domainName ? null : $this->domainRepository->findOneBy(['domain' => $domainName]);
 
         $dto->receivedAt = $email?->getCreatedAt();
+        $dto->source = $email?->getSource();
         $dto->fromAddress = $email?->getFromAddress();
         $dto->reportingOrganization = $entity->getReportingOrganization();
         $dto->reportingOrganizationEmail = $entity->getReportingOrganizationEmail();

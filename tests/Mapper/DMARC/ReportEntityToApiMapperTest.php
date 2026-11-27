@@ -9,6 +9,7 @@ use App\Entity\DMARC\Domain;
 use App\Entity\DMARC\Report;
 use App\Entity\Email\Email;
 use App\Entity\User\User;
+use App\Enum\Email\ReportSource;
 use App\Mapper\DMARC\ReportEntityToApiMapper;
 use App\Repository\DMARC\DomainRepository;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -38,6 +39,7 @@ final class ReportEntityToApiMapperTest extends TestCase
             ->setMessageId('<msg@example.com>')
             ->setAttachmentFilename('report.xml')
             ->setAttachmentContentType('application/xml')
+            ->setSource(ReportSource::MAILBOX)
         ;
 
         $report = new Report();
@@ -74,6 +76,7 @@ final class ReportEntityToApiMapperTest extends TestCase
 
         self::assertSame($reportId, $dto->id);
         self::assertSame('sender@example.com', $dto->fromAddress);
+        self::assertSame(ReportSource::MAILBOX, $dto->source);
         self::assertSame('Example Org', $dto->reportingOrganization);
         self::assertSame($domainId->toRfc4122(), $dto->domainId);
         self::assertTrue($dto->isVerified);
