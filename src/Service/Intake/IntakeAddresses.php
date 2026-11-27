@@ -9,8 +9,9 @@ use App\Service\Email\AggregateReportPostboxAddressProvider;
 use App\Service\Platform\PlatformSettingsProvider;
 
 /**
- * The addresses a DMARC record can send reports to: the webhook's, while
- * the API takes reports, and the report address of each enabled mailbox.
+ * The addresses a DMARC record can send reports to: the report address of
+ * each enabled mailbox, and then the webhook's, while the webhook is on.
+ * Mailboxes come first, because they are how a new install takes reports.
  */
 final readonly class IntakeAddresses
 {
@@ -27,16 +28,16 @@ final readonly class IntakeAddresses
     {
         $addresses = [];
 
-        $webhook = $this->webhookAddress->getAddress();
-        if (null !== $webhook && $this->settings->isWebhookEnabled()) {
-            $addresses[] = new IntakeAddress($webhook, IntakeAddress::WEBHOOK, 'Webhook');
-        }
-
         foreach ($this->mailboxes->findEnabled() as $mailbox) {
             $address = $mailbox->getReportAddress();
             if (null !== $address && '' !== $address) {
                 $addresses[] = new IntakeAddress($address, IntakeAddress::MAILBOX, $mailbox->getName());
             }
+        }
+
+        $webhook = $this->webhookAddress->getAddress();
+        if (null !== $webhook && $this->settings->isWebhookEnabled()) {
+            $addresses[] = new IntakeAddress($webhook, IntakeAddress::WEBHOOK, 'Webhook');
         }
 
         return $addresses;

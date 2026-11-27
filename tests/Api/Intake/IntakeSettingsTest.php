@@ -92,8 +92,9 @@ final class IntakeSettingsTest extends ApiIntegrationTestCase
         ]);
 
         $addresses = $this->call('GET', '/v1/platform/intake/addresses')['body'];
-        self::assertSame(['webhook', 'mailbox'], array_column($addresses, 'kind'));
-        self::assertSame('dmarc@example.com', $addresses[1]['address']);
+        // A mailbox is suggested before the webhook.
+        self::assertSame(['mailbox', 'webhook'], array_column($addresses, 'kind'));
+        self::assertSame('dmarc@example.com', $addresses[0]['address']);
     }
 
     public function testRefusesAReportDomainThatIsNoDomain(): void
