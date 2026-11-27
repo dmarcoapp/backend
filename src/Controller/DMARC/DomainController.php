@@ -9,6 +9,8 @@ use App\DTO\Output\Common\PaginationApi;
 use App\DTO\Output\Common\PaginationMetaApi;
 use App\DTO\Output\DMARC\DomainApi;
 use App\Entity\DMARC\Domain;
+use App\Message\DMARC\ProcessDomain;
+use App\MessageHandler\DMARC\ProcessDomainHandler;
 use App\Repository\DMARC\DomainRepository;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -16,6 +18,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfonycasts\MicroMapper\MicroMapperInterface;
@@ -23,9 +26,14 @@ use Symfonycasts\MicroMapper\MicroMapperInterface;
 #[IsGranted('ROLE_USER')]
 final class DomainController extends AbstractController
 {
+    // A check on demand waits this long after the domain's last check,
+    // whether that one came from the schedule or from a click.
+    public const int CHECK_COOLDOWN_SECONDS = 60;
+
     public function __construct(
         private readonly MicroMapperInterface $microMapper,
         private readonly DomainRepository $repository,
+        private readonly ProcessDomainHandler $processDomain,
     ) {}
 
     #[OA\Get(
@@ -83,6 +91,37 @@ final class DomainController extends AbstractController
     public function get(
         Domain $domain,
     ): JsonResponse {
+        return new JsonResponse(
+            $this->microMapper->map($domain, DomainApi::class)
+        );
+    }
+
+    #[OA\Post(
+        description: 'Reads the domain\'s DMARC record from DNS now, instead of at its next scheduled check. Refused for a minute after the last check.',
+        summary: 'Checks a domain again.',
+        security: [['Bearer' => []]],
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'The domain after the check.',
+        content: new Model(type: DomainApi::class)
+    )]
+    #[OA\Response(response: 429, description: 'The domain was checked less than a minute ago; Retry-After says when to try again.')]
+    #[OA\Tag(name: 'DMARC')]
+    #[Route('/v1/dmarc/domains/{domain}/check', name: 'app_domains_check', methods: [Request::METHOD_POST])]
+    public function check(
+        Domain $domain,
+    ): JsonResponse {
+        $lastChecked = $domain->getLastChecked();
+        if (null !== $lastChecked) {
+            $wait = $lastChecked->getTimestamp() + self::CHECK_COOLDOWN_SECONDS - time();
+            if ($wait > 0) {
+                throw new TooManyRequestsHttpException($wait);
+            }
+        }
+
+        ($this->processDomain)(new ProcessDomain((string) $domain->getId()));
+
         return new JsonResponse(
             $this->microMapper->map($domain, DomainApi::class)
         );

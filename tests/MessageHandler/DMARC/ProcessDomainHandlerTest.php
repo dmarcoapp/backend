@@ -2,29 +2,6 @@
 
 declare(strict_types=1);
 
-namespace App\MessageHandler\DMARC;
-
-final class TestDnsRecordStore
-{
-    /**
-     * @var array<int, array<string, string>>
-     */
-    public static array $records = [];
-
-    /**
-     * @param array<int, array<string, string>> $records
-     */
-    public static function setRecords(array $records): void
-    {
-        self::$records = $records;
-    }
-}
-
-function dns_get_record(string $hostname, int $type): array
-{
-    return TestDnsRecordStore::$records;
-}
-
 namespace App\Tests\MessageHandler\DMARC;
 
 use App\Entity\DMARC\Domain;
@@ -37,6 +14,8 @@ use App\Repository\Platform\PlatformSettingsRepository;
 use App\Service\Intake\IntakeAddresses;
 use App\Tests\Api\ApiIntegrationTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
+
+require_once __DIR__.'/../../Support/DnsRecordStub.php';
 
 /**
  * @internal

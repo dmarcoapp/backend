@@ -93,7 +93,10 @@ final readonly class ApiExceptionListener
             $response['error']['message'] = 'Validation error';
         }
 
-        $event->setResponse(new JsonResponse($response, $statusCode));
+        // Headers the exception carries, such as Retry-After, stay on the response.
+        $headers = $exception instanceof HttpExceptionInterface ? $exception->getHeaders() : [];
+
+        $event->setResponse(new JsonResponse($response, $statusCode, $headers));
     }
 
     private function getSafeHttpMessage(HttpExceptionInterface $exception): string

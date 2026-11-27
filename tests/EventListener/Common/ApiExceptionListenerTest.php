@@ -12,6 +12,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Validator\ConstraintViolation;
@@ -62,6 +63,19 @@ final class ApiExceptionListenerTest extends TestCase
         $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('Bad request', $payload['error']['message']);
         self::assertSame(400, $payload['error']['code']);
+    }
+
+    public function testKeepsTheHeadersOfAnHttpException(): void
+    {
+        $listener = new ApiExceptionListener('prod');
+        $event = $this->createExceptionEvent(new TooManyRequestsHttpException(42));
+
+        $listener->onKernelException($event);
+
+        $response = $event->getResponse();
+        self::assertNotNull($response);
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame('42', $response->headers->get('Retry-After'));
     }
 
     public function testFormatsValidationErrors(): void
