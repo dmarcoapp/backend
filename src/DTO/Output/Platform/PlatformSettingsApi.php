@@ -18,6 +18,11 @@ final class PlatformSettingsApi
     public int $reportRetentionDays = 0;
     public bool $ipLookupEnabled = true;
 
+    /**
+     * The IANA time zone the dashboard shows dates and times in.
+     */
+    public string $displayTimezone = 'UTC';
+
     public bool $mailConfigured = false;
     public ?string $smtpHost = null;
     public ?int $smtpPort = null;

@@ -20,6 +20,7 @@ use Symfony\Component\Mailer\Transport\Dsn;
 final readonly class PlatformSettingsProvider
 {
     public const int DEFAULT_REPORT_RETENTION_DAYS = 365;
+    public const string DEFAULT_DISPLAY_TIMEZONE = 'UTC';
 
     public function __construct(
         private PlatformSettingsRepository $repository,
@@ -55,6 +56,15 @@ final readonly class PlatformSettingsProvider
             : $this->settings()->isIpLookupEnabled();
 
         return $enabled ?? true;
+    }
+
+    /**
+     * Kept in the database in legacy mode too, because it never was an
+     * environment variable.
+     */
+    public function displayTimezone(): string
+    {
+        return $this->settings()->getDisplayTimezone() ?? self::DEFAULT_DISPLAY_TIMEZONE;
     }
 
     public function reportAddressToken(): string

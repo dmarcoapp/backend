@@ -83,6 +83,11 @@ final class PlatformSettingsController extends AbstractController
             $settings->setIpLookupEnabled($input->ipLookupEnabled);
         }
 
+        if (null !== $input->displayTimezone) {
+            $timezone = trim($input->displayTimezone);
+            $settings->setDisplayTimezone('' === $timezone ? null : $timezone);
+        }
+
         if (null !== $input->smtpHost) {
             $host = strtolower(trim($input->smtpHost));
             '' === $host ? $settings->clearSmtp() : $settings->setSmtpHost($host);

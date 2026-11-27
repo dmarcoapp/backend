@@ -42,6 +42,13 @@ class PlatformSettings
     #[ORM\Column(nullable: true)]
     private ?bool $ipLookupEnabled = null;
 
+    /**
+     * The time zone the dashboard shows dates and times in, as an IANA name.
+     * Times are stored in UTC whatever it is.
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $displayTimezone = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $smtpHost = null;
 
@@ -142,6 +149,18 @@ class PlatformSettings
     public function setIpLookupEnabled(?bool $ipLookupEnabled): static
     {
         $this->ipLookupEnabled = $ipLookupEnabled;
+
+        return $this->touch();
+    }
+
+    public function getDisplayTimezone(): ?string
+    {
+        return $this->displayTimezone;
+    }
+
+    public function setDisplayTimezone(?string $displayTimezone): static
+    {
+        $this->displayTimezone = $displayTimezone;
 
         return $this->touch();
     }

@@ -8,8 +8,9 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * A change to the platform settings. A field left out stays as it is. An empty
- * string clears the field: the mail server, which turns outgoing mail off, the
- * username or password, or the sender address, which falls back to its default.
+ * string clears the field: the display time zone, which goes back to UTC, the
+ * mail server, which turns outgoing mail off, the username or password, or the
+ * sender address, which falls back to its default.
  */
 final readonly class PlatformSettingsUpdate
 {
@@ -18,6 +19,13 @@ final readonly class PlatformSettingsUpdate
         public ?int $reportRetentionDays = null,
         #[Assert\Type(type: 'bool')]
         public ?bool $ipLookupEnabled = null,
+        // An IANA time zone name. Empty goes back to UTC.
+        #[Assert\Length(max: 64)]
+        #[Assert\AtLeastOneOf([
+            new Assert\Blank(),
+            new Assert\Timezone(zone: \DateTimeZone::ALL_WITH_BC),
+        ])]
+        public ?string $displayTimezone = null,
         #[Assert\Length(max: 255)]
         #[Assert\AtLeastOneOf([
             new Assert\Blank(),

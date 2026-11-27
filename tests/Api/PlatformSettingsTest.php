@@ -31,6 +31,7 @@ final class PlatformSettingsTest extends ApiIntegrationTestCase
         self::assertSame('platform', $payload['mode']);
         self::assertSame(365, $payload['reportRetentionDays']);
         self::assertTrue($payload['ipLookupEnabled']);
+        self::assertSame('UTC', $payload['displayTimezone']);
         self::assertFalse($payload['mailConfigured']);
         self::assertNull($payload['smtpHost']);
         self::assertNull($payload['senderAddress']);
@@ -118,6 +119,8 @@ final class PlatformSettingsTest extends ApiIntegrationTestCase
         yield 'port out of range' => [['smtpPort' => 70000]];
         yield 'unknown security' => [['smtpSecurity' => 'ssl']];
         yield 'sender that is no address' => [['senderAddress' => 'dmarco']];
+        yield 'time zone that does not exist' => [['displayTimezone' => 'Europe/Atlantis']];
+        yield 'time zone abbreviation' => [['displayTimezone' => 'Budapest']];
     }
 
     /**
@@ -136,6 +139,43 @@ final class PlatformSettingsTest extends ApiIntegrationTestCase
         );
 
         self::assertSame(422, $response->getStatusCode(), (string) $response->getContent());
+    }
+
+    public function testSetsAndClearsTheDisplayTimezone(): void
+    {
+        $token = $this->signIn('platform-timezone@example.com');
+
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/platform/settings',
+            payload: ['displayTimezone' => 'Europe/Budapest'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame('Europe/Budapest', $this->getSettings($token)['displayTimezone']);
+
+        // The names browsers still use for some zones are taken as well.
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/platform/settings',
+            payload: ['displayTimezone' => 'Asia/Calcutta'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame('Asia/Calcutta', $this->getSettings($token)['displayTimezone']);
+
+        $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/platform/settings',
+            payload: ['displayTimezone' => ''],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame('UTC', $this->getSettings($token)['displayTimezone']);
+        $this->entityManager->clear();
+        self::assertNull(self::getContainer()->get(PlatformSettingsRepository::class)->get()->getDisplayTimezone());
     }
 
     public function testTheTestEmailSaysWhenOutgoingMailIsNotSetUp(): void

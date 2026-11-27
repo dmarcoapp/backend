@@ -41,6 +41,7 @@ final readonly class PlatformSettingsEntityToApiMapper implements MapperInterfac
         $dto->mode = $legacy ? PlatformSettingsApi::MODE_LEGACY : PlatformSettingsApi::MODE_PLATFORM;
         $dto->reportRetentionDays = $this->settings->reportRetentionDays();
         $dto->ipLookupEnabled = $this->settings->ipLookupEnabled();
+        $dto->displayTimezone = $this->settings->displayTimezone();
         $dto->effectiveSenderAddress = $this->settings->senderAddress();
         $dto->defaultSenderAddress = $this->settings->defaultSenderAddress();
         $dto->reportAddress = $this->reportAddressProvider->getAddress();

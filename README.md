@@ -138,11 +138,16 @@ Important settings:
 
 ### Settings kept in the database
 
-Report retention, IP lookups, outgoing mail, the sender address, and the report
-domain are set on the dashboard's Platform page, through
+Report retention, IP lookups, the display time zone, outgoing mail, the sender
+address, and the report domain are set on the dashboard's Platform page, through
 `/v1/platform/settings`, and kept in the database. The SMTP password is stored
 encrypted with `APP_ENCRYPTION_KEY`. Without that key it cannot be read, and has
 to be entered again.
+
+The display time zone is an IANA name, such as `Europe/Budapest`, and only
+changes how the dashboard shows dates and times: the API returns them in UTC,
+whatever it is. `bin/console app:platform:timezone` prints it, and
+`bin/console app:platform:timezone Europe/Budapest` sets it.
 
 Until `APP_ENCRYPTION_KEY` is set, these settings come from the environment
 variables that held them before: `MAILER_DSN`, `APP_EMAIL_SENDER_ADDRESS`,
@@ -347,6 +352,7 @@ docker compose exec php bash -lc "bin/console app:intake:mailbox:test <name>"
 docker compose exec php bash -lc "bin/console app:intake:mailbox:poll <name>"
 docker compose exec php bash -lc "bin/console app:intake:api-key:create <name>"
 docker compose exec php bash -lc "bin/console app:platform:import-env"
+docker compose exec php bash -lc "bin/console app:platform:timezone Europe/Budapest"
 ```
 
 `bin/console list app` shows them all.
