@@ -155,17 +155,6 @@ final class PlatformSettingsTest extends ApiIntegrationTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
         self::assertSame('Europe/Budapest', $this->getSettings($token)['displayTimezone']);
 
-        // The names browsers still use for some zones are taken as well.
-        $response = $this->requestJson(
-            method: 'PATCH',
-            uri: '/v1/platform/settings',
-            payload: ['displayTimezone' => 'Asia/Calcutta'],
-            headers: $this->authorizeHeaders($token),
-        );
-
-        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
-        self::assertSame('Asia/Calcutta', $this->getSettings($token)['displayTimezone']);
-
         $this->requestJson(
             method: 'PATCH',
             uri: '/v1/platform/settings',
@@ -176,6 +165,28 @@ final class PlatformSettingsTest extends ApiIntegrationTestCase
         self::assertSame('UTC', $this->getSettings($token)['displayTimezone']);
         $this->entityManager->clear();
         self::assertNull(self::getContainer()->get(PlatformSettingsRepository::class)->get()->getDisplayTimezone());
+    }
+
+    public function testTakesTheOldZoneNamesBrowsersStillUse(): void
+    {
+        // The image's PHP carries its own zone database, which has them. A PHP
+        // built on the system's, as on Debian and Ubuntu without
+        // tzdata-legacy, does not.
+        if (!in_array('Asia/Calcutta', \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)) {
+            self::markTestSkipped('This PHP does not know Asia/Calcutta.');
+        }
+
+        $token = $this->signIn('platform-timezone-alias@example.com');
+
+        $response = $this->requestJson(
+            method: 'PATCH',
+            uri: '/v1/platform/settings',
+            payload: ['displayTimezone' => 'Asia/Calcutta'],
+            headers: $this->authorizeHeaders($token),
+        );
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame('Asia/Calcutta', $this->getSettings($token)['displayTimezone']);
     }
 
     public function testTheTestEmailSaysWhenOutgoingMailIsNotSetUp(): void
