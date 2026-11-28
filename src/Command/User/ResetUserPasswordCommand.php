@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command\User;
 
 use App\Repository\User\UserRepository;
+use App\Service\User\SessionRevoker;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -21,6 +22,7 @@ final class ResetUserPasswordCommand extends Command
     public function __construct(
         private readonly UserRepository $userRepository,
         private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly SessionRevoker $sessionRevoker,
     ) {
         parent::__construct();
     }
@@ -41,8 +43,9 @@ final class ResetUserPasswordCommand extends Command
         $plainPassword = $io->askHidden('New password', CreateUserCommand::validatePassword(...));
         $user->setPassword($this->passwordHasher->hashPassword($user, $plainPassword));
         $this->userRepository->save($user);
+        $this->sessionRevoker->revokeAll($user);
 
-        $io->success('Password changed!');
+        $io->success('Password changed! Every session of the account is signed out.');
 
         return Command::SUCCESS;
     }

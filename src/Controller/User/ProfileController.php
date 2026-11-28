@@ -9,6 +9,7 @@ use App\DTO\Output\User\UserApi;
 use App\Entity\User\User;
 use App\Event\User\PasswordChangeEvent;
 use App\Repository\User\UserRepository;
+use App\Service\User\SessionRevoker;
 use Doctrine\ORM\EntityManagerInterface;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -33,6 +34,7 @@ final class ProfileController extends AbstractController
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly MicroMapperInterface $microMapper,
+        private readonly SessionRevoker $sessionRevoker,
     ) {}
 
     #[OA\Response(
@@ -59,7 +61,7 @@ final class ProfileController extends AbstractController
         content: new Model(type: UserApi::class)
     )]
     #[OA\Patch(
-        description: 'Setting a new password also requires the current one.',
+        description: 'Setting a new password also requires the current one. It signs every session out, so the answer then also holds a new token and refresh_token for this one.',
         summary: 'Updates the authenticated user. Only updates the fields provided.',
         security: [['Bearer' => []]],
     )]
@@ -93,7 +95,13 @@ final class ProfileController extends AbstractController
 
         $this->entityManager->flush();
 
-        return new JsonResponse($this->microMapper->map($user, UserApi::class));
+        $profile = $this->microMapper->map($user, UserApi::class);
+        if (null === $input->password) {
+            return new JsonResponse($profile);
+        }
+
+        // Issued only now, under the password just saved.
+        return new JsonResponse([...get_object_vars($profile), ...$this->sessionRevoker->issue($user)]);
     }
 
     private function getManagedUser(User $user): User

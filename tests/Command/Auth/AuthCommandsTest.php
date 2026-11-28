@@ -14,6 +14,14 @@ use App\Entity\User\User;
 use App\Enum\User\TwoFactorMethod;
 use App\Message\User\SendWeeklyOverview;
 use App\Repository\User\UserRepository;
+use App\Service\User\SessionRevoker;
+use App\Entity\RefreshToken;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Mapping\ClassMetadata;
+use Gesdinet\JWTRefreshTokenBundle\Generator\RefreshTokenGeneratorInterface;
+use Gesdinet\JWTRefreshTokenBundle\Model\RefreshTokenManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use App\Service\User\UserFactory;
 use App\Tests\Api\ApiIntegrationTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -222,7 +230,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $hasher = $this->createStub(UserPasswordHasherInterface::class);
         $hasher->method('hashPassword')->willReturn('hashed');
 
-        $command = new ResetUserPasswordCommand($userRepository, $hasher);
+        $command = new ResetUserPasswordCommand($userRepository, $hasher, $this->sessionRevoker($user));
 
         $tester = new CommandTester($command);
         $tester->setInputs(['reset@example.com', 'Str0ngPassw0rd!']);
@@ -230,6 +238,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertSame('hashed', $user->getPassword());
+        self::assertSame(1, $user->getSessionVersion());
     }
 
     public function testResetUserPasswordCommandFailsWhenUserMissing(): void
@@ -240,6 +249,7 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $command = new ResetUserPasswordCommand(
             $userRepository,
             $this->createStub(UserPasswordHasherInterface::class),
+            $this->sessionRevoker(),
         );
 
         $tester = new CommandTester($command);
@@ -288,5 +298,34 @@ final class AuthCommandsTest extends ApiIntegrationTestCase
         $property = new \ReflectionProperty($entity, 'id');
         $property->setAccessible(true);
         $property->setValue($entity, $id);
+    }
+
+    private function sessionRevoker(?User $expectedUser = null): SessionRevoker
+    {
+        if (null === $expectedUser) {
+            $connection = $this->createStub(Connection::class);
+        } else {
+            $connection = $this->createMock(Connection::class);
+            $connection
+                ->expects(self::once())
+                ->method('delete')
+                ->with('refresh_tokens', ['username' => $expectedUser->getUserIdentifier()])
+                ->willReturn(1)
+            ;
+        }
+        $entityManager = $this->createStub(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $metadata = $this->createStub(ClassMetadata::class);
+        $metadata->method('getTableName')->willReturn('refresh_tokens');
+        $metadata->method('getColumnName')->willReturn('username');
+        $entityManager->method('getClassMetadata')->willReturn($metadata);
+
+        return new SessionRevoker(
+            $entityManager,
+            $this->createStub(JWTTokenManagerInterface::class),
+            $this->createStub(RefreshTokenGeneratorInterface::class),
+            $this->createStub(RefreshTokenManagerInterface::class),
+            2592000,
+        );
     }
 }

@@ -58,6 +58,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
     #[ORM\Column(options: ['default' => true])]
     private bool $weeklyOverviewNotificationEnabled = true;
 
+    /**
+     * Goes up whenever every session of the account is to end. Each access
+     * token carries the value it was issued under, see SessionVersionClaim.
+     */
+    #[ORM\Column(options: ['default' => 0])]
+    private int $sessionVersion = 0;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
@@ -148,6 +155,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, EntityI
     public function setTwoFactorAppSecret(?string $twoFactorAppSecret): static
     {
         $this->twoFactorAppSecret = $twoFactorAppSecret;
+
+        return $this;
+    }
+
+    public function getSessionVersion(): int
+    {
+        return $this->sessionVersion;
+    }
+
+    public function endAllSessions(): static
+    {
+        ++$this->sessionVersion;
 
         return $this;
     }
