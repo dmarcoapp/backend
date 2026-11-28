@@ -134,9 +134,32 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
         self::assertTrue($twoFactorPayload['twoFactorAppEnabled'] ?? false);
         self::assertEmpty($twoFactorPayload['twoFactorAppSecret'] ?? null);
 
+        // The access token alone does not take the second factor off.
+        $withoutCodeResponse = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/user/profile/2fa/app/disable',
+            headers: $this->authorizeHeaders($token),
+        );
+        self::assertSame(400, $withoutCodeResponse->getStatusCode(), (string) $withoutCodeResponse->getContent());
+
+        $managedUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'twofactor-app@example.com']);
+        self::assertNotNull($managedUser);
+        $this->entityManager->refresh($managedUser);
+        $validCode = $twoFactorService->getAppCode($managedUser);
+        $wrongCode = str_pad((string) (((int) $validCode + 500000) % 1000000), 6, '0', STR_PAD_LEFT);
+
+        $wrongCodeResponse = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/user/profile/2fa/app/disable',
+            payload: ['code' => $wrongCode],
+            headers: $this->authorizeHeaders($token),
+        );
+        self::assertSame(400, $wrongCodeResponse->getStatusCode(), (string) $wrongCodeResponse->getContent());
+
         $disableResponse = $this->requestJson(
             method: 'POST',
             uri: '/v1/user/profile/2fa/app/disable',
+            payload: ['code' => $validCode],
             headers: $this->authorizeHeaders($token),
         );
 
@@ -181,5 +204,51 @@ final class TwoFactorFlowTest extends ApiIntegrationTestCase
             ->setTwoFactorAppSecret(self::getContainer()->get(TwoFactorSecretGenerator::class)->generate())
         ;
         $this->entityManager->flush();
+    }
+
+    public function testWrongCodesWhenTurningOffAreThrottledTogetherWithSignIn(): void
+    {
+        $this->createAccountWithAuthenticator('twofactor-disable-throttle@example.com');
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'twofactor-disable-throttle@example.com']);
+        self::assertNotNull($user);
+        $token = $this->login('twofactor-disable-throttle@example.com', 'Str0ngPassw0rd!@#');
+
+        $twoFactorService = self::getContainer()->get(TwoFactorService::class);
+        $validCode = $twoFactorService->getAppCode($user);
+        $wrongCode = str_pad((string) (((int) $validCode + 500000) % 1000000), 6, '0', STR_PAD_LEFT);
+
+        for ($attempt = 0; $attempt < 5; ++$attempt) {
+            $response = $this->requestJson(
+                method: 'POST',
+                uri: '/v1/user/profile/2fa/app/disable',
+                payload: ['code' => $wrongCode],
+                headers: $this->authorizeHeaders($token),
+            );
+            self::assertSame(400, $response->getStatusCode(), (string) $response->getContent());
+        }
+
+        $response = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/user/profile/2fa/app/disable',
+            payload: ['code' => $validCode],
+            headers: $this->authorizeHeaders($token),
+        );
+        self::assertSame(429, $response->getStatusCode(), (string) $response->getContent());
+
+        // Sign-in with a code shares the count.
+        $loginResponse = $this->requestJson(
+            method: 'POST',
+            uri: '/v1/auth/login_check',
+            payload: [
+                'username' => 'twofactor-disable-throttle@example.com',
+                'password' => 'Str0ngPassw0rd!@#',
+                'two_factor_code' => $validCode,
+            ],
+        );
+        self::assertSame(429, $loginResponse->getStatusCode(), (string) $loginResponse->getContent());
+
+        $this->entityManager->clear();
+        $reloaded = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'twofactor-disable-throttle@example.com']);
+        self::assertSame(TwoFactorMethod::APP, $reloaded?->getTwoFactorMethod());
     }
 }
